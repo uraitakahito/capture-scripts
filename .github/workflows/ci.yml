@@ -1,0 +1,37 @@
+name: ci
+
+# この repo は依存を持たない。**だから pnpm も lockfile も audit も無い** ——
+# ページの中で評価される素の JS と、Node の標準ライブラリだけで書いた検査しか在らず、
+# 監査する依存木が存在しない。他の repo に合わせて pnpm を足すと、
+# 「lockfile を維持する仕事」だけが増えて、守るものが増えない。
+#
+# 見ているのは tools/check.mjs の 3 つ: JS として読めるか / catalog.json と実体が
+# 一致するか / sha256 はいくつか。**振る舞いはここでは見ない** —— jsdom は
+# レイアウトを持たないので autoscroll は 1 段も進まない。証拠は capture-scheduler の
+# e2e（本物のブラウザ）に置いてある。
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      - name: Check
+        run: npm run check

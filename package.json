@@ -1,0 +1,18 @@
+{
+  "name": "capture-scripts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "BrowserHive のページの中で走らせる JavaScript。リクエストが運び、capture-ledger の目録が配る",
+  "//": [
+    "package.json にコメントを書く方法の議論:",
+    "https://stackoverflow.com/questions/14221579/how-do-i-add-comments-to-package-json-for-npm-install"
+  ],
+  "//dependencies": "無い。**依存を持たないことが、この repo の性質の一部。** ここに在るのはページの中で評価される素の JS で、bundler も transpiler も通さない。台帳が読むのはファイルのバイト列そのもので、BrowserHive はそれを sha256 で照合する —— 間に何かを挟むと、その照合が「何を照合したのか」を言えなくなる。検査 (tools/check.mjs) も Node の標準ライブラリだけで書いてある。",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "check": "node tools/check.mjs"
+  }
+}

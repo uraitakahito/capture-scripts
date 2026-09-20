@@ -1,0 +1,17 @@
+{
+  "profile": "capture-scripts/1",
+  "scripts": [
+    {
+      "id": "autoscroll",
+      "phase": "behavior",
+      "file": "scripts/autoscroll.js",
+      "summary": "全高までスクロールして遅延読み込みを発火させる"
+    },
+    {
+      "id": "autofetch",
+      "phase": "behavior",
+      "file": "scripts/autofetch.js",
+      "summary": "srcset の全候補・data-* を能動的に取りに行く"
+    }
+  ]
+}
