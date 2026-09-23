@@ -19,7 +19,7 @@
   const maxSteps = Number(opts.maxSteps ?? 40);
   const stepDelayMs = Number(opts.stepDelayMs ?? 250);
   const settleMs = Number(opts.idleTimeMs ?? 1000);
-  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
   let last = -1;
   let steps = 0;

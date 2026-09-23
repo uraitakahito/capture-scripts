@@ -1,14 +1,12 @@
 name: ci
 
-# この repo は依存を持たない。**だから pnpm も lockfile も audit も無い** ——
-# ページの中で評価される素の JS と、Node の標準ライブラリだけで書いた検査しか在らず、
-# 監査する依存木が存在しない。他の repo に合わせて pnpm を足すと、
-# 「lockfile を維持する仕事」だけが増えて、守るものが増えない。
+# runtime の依存は無い (ページの中で評価されるのは書いたままの TS のバイト列)。dev の依存は
+# typescript だけで、それが型の門番の 1 か所目 —— **型が通らない TS は tag にならない**。
+# 2 か所目は ts-compile-service (クロールの段ごとに同じ型検査をしてから JS にする)。
 #
-# 見ているのは tools/check.mjs の 3 つ: JS として読めるか / catalog.json と実体が
-# 一致するか / sha256 はいくつか。**振る舞いはここでは見ない** —— jsdom は
-# レイアウトを持たないので autoscroll は 1 段も進まない。証拠は capture-scheduler の
-# e2e（本物のブラウザ）に置いてある。
+# 見ているのは 2 つ: tsc (型と構文) と tools/check.mjs (catalog.json と実体の一致 / sha256 の
+# 印字)。**振る舞いはここでは見ない** —— jsdom はレイアウトを持たないので autoscroll は
+# 1 段も進まない。証拠は capture-scheduler の e2e (本物のブラウザ) に置いてある。
 
 on:
   push:
@@ -29,9 +27,16 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - uses: pnpm/action-setup@v6
+
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm audit --audit-level=low
 
       - name: Check
-        run: npm run check
+        run: pnpm run check

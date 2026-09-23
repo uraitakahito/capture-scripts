@@ -1,6 +1,6 @@
 # capture-scripts
 
-BrowserHive が取り込むページの中で走らせる JavaScript。
+BrowserHive が取り込むページの中で走らせるスクリプト。TypeScript で書く。
 
 **サーバは顔ぶれを持たない。** [BrowserHive](https://github.com/uraitakahito/browserhive) v11.0.0 から、
 組み込みの behavior もサイト別の behavior も無くなった。送らなければページの中では何も走らず、
@@ -11,21 +11,32 @@ BrowserHive が取り込むページの中で走らせる JavaScript。
 （`scripts` 表）で、この repo はその**出どころ**。
 
 ```
-capture-scripts  ──→  capture-ledger の目録  ──→  Windmill の flow  ──→  BrowserHive  ──→  ページ
- (source と phase)      (版を固定する)          (運ぶだけ)         (評価する)
+capture-scripts  ──→  capture-ledger の目録  ──→  Windmill の flow  ──→  ts-compile-service  ──→  BrowserHive  ──→  ページ
+ (TS と phase)          (TS の版を固定する)       (運ぶだけ)          (型検査して JS に)      (JS を評価する)
 ```
 
 ## 中身
 
 | | |
 |---|---|
-| `scripts/*.js` | ページの中で評価される**素の JavaScript**。bundler も transpiler も通さない |
+| `scripts/*.ts` | ページの中で走らせるスクリプト。書いたままのバイト列が目録に入る |
+| `types/host.d.ts` | 受け皿 `__bh` の型。[ts-compile-service](https://github.com/uraitakahito/ts-compile-service) にも写される（下の「2 つの門番」） |
 | `catalog.json` | ソースが自分では言えないこと —— `id` と `phase`、一言の `summary` |
-| `tools/check.mjs` | `npm run check`。読めるか・catalog と一致するか・sha256 はいくつか |
+| `tsconfig.json` | strict と `erasableSyntaxOnly`。enum のような「剥がして消えない構文」を書かせない |
+| `tools/check.mjs` | `pnpm run check` の後半。catalog と一致するか・sha256 はいくつか（前半は tsc） |
 
-依存は無い。**それがこの repo の性質の一部**で、台帳が読むのはファイルのバイト列そのもの、
-BrowserHive はそれを `sha256` で照合する —— 間に何かを挟むと、その照合が
-「何を照合したのか」を言えなくなる。
+runtime の依存は無い。台帳が読むのは書いたままの TS のバイト列そのもので、それに `sha256` を打つ。
+JS への変換は Windmill の flow の中で ts-compile-service がクロールの段ごとに行い、BrowserHive は
+その JS を `sha256` で照合する —— 2 つの hash が、変換した場所で継がれる。dev の依存は typescript だけ。
+
+## 2 つの門番 —— 型が通らない TS は走らない
+
+1. **この repo の CI** (`tsc --noEmit`)。型が通らなければ tag にならず、目録にも入らない
+2. **ts-compile-service**。クロールの段ごとに同じ tsconfig で型検査し、通らなければ 422 を返して段ごと落とす
+   （目録は CLI でも足せるので、tag を経ない道にも門番が要る）
+
+受け皿の型 `types/host.d.ts` は 2 か所に在る（ここと ts-compile-service）。**直すならここが正**で、
+あちらの CI が tag の raw と 1 バイトも違わないことを見る。
 
 ## 受け皿 —— ページの中で使えるもの
 
@@ -46,9 +57,10 @@ globalThis.__bh = {
 };
 ```
 
-書くときの作法は 3 つだけ。
+書くときの作法は 3 つだけ。`globalThis.__bh` は `types/host.d.ts` で型が付いていて、
+綴りを間違えると tsc が止める（`remaining` → "Did you mean 'remainingMs'?"）。
 
-```js
+```ts
 (async () => {
   const opts = globalThis.__bh.opts["あなたの id"] ?? {};   // ① 設定は opts から、既定はソースの中に
   const maxSteps = Number(opts.maxSteps ?? 40);
@@ -95,9 +107,9 @@ pnpm run scripts list
 
 ## 足す
 
-1. `scripts/<id>.js` を書く（上の作法 3 つ）
+1. `scripts/<id>.ts` を書く（上の作法 3 つ）
 2. `catalog.json` に `id` / `phase` / `file` / `summary` を足す
-3. `npm run check`
+3. `pnpm run check`（tsc → catalog の一致 → sha256 の印字）
 4. 目録へ入れ直す
 
 ## この検査が言えないこと
@@ -108,7 +120,7 @@ pnpm run scripts list
 （capture-fixtures の `/responsive-images` に対して、ブラウザが自分では要求しない
 画像の変種が届いたかを数える）。
 
-ここの検査は「壊れた JS」と「catalog の食い違い」を止めるためのもの。
+ここの検査は「型が通らない TS」と「catalog の食い違い」を止めるためのもの。
 
 ## リリース
 
