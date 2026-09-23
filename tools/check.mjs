@@ -1,27 +1,27 @@
 #!/usr/bin/env node
 /**
- * この repo が言えることだけを言う検査 (`npm run check`)。
+ * この repo が言えることだけを言う検査 (`pnpm run check` の後半。前半は tsc)。
  *
  * ## 何を見るか
  *
- * 1. **JS として読めるか** —— `node --check`。壊れた source を配ると、BrowserHive は
- *    ページの中で評価に失敗し、取り込み自体は成功したまま「何も起きなかった」になる。
- * 2. **catalog.json と実体が一致するか** —— 列挙された `file` が在る / `scripts/` の
- *    `.js` が全部列挙されている / `id` が重複しない / `phase` が 2 値のどちらか。
- * 3. **sha256 を印字する** —— 台帳 (`pnpm run scripts list`) に並ぶ digest と、
- *    目で突き合わせられるように。
+ * 1. **catalog.json と実体が一致するか** —— 列挙された `file` が在る / `scripts/` の
+ *    `.ts` が全部列挙されている / `id` が重複しない / `phase` が 2 値のどちらか。
+ * 2. **sha256 を印字する** —— 台帳 (`pnpm run scripts list`) に並ぶ digest と、
+ *    目で突き合わせられるように。台帳が打つのは、書いたままの TS のバイト列に対する値。
  *
  * ## 何を見ないか
+ *
+ * **型と構文は tsc が見る** (`pnpm run typecheck`)。型が通らない TS は tag にならない ——
+ * それが門番の 1 か所目で、2 か所目はクロールの段ごとに同じ型検査をする ts-compile-service。
  *
  * **「本当にスクロールするか」は、ここでは言えない。** jsdom はレイアウトを持たず
  * `scrollHeight` が常に 0 なので、`autoscroll` は 1 段も進まない。振る舞いの証拠には
  * 本物のブラウザが要るので、capture-scheduler の e2e (capture-fixtures の
  * `/responsive-images` に対して `autofetch` が引いた変種を数える) に置いてある。
  *
- * ここの検査は「壊れた JS」と「catalog の食い違い」を止めるためのもの。
+ * ここの検査は「catalog の食い違い」を止めるためのもの。
  */
 import { createHash } from "node:crypto";
-import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -42,7 +42,7 @@ if (catalog.profile !== "capture-scripts/1") {
 // **ディスクの側から見る。** catalog を基準に回すと、catalog に載っていないファイルが
 // 黙って配られない (そして誰も気づかない) —— 足したのに載せ忘れた、がいちばん起きる。
 const onDisk = readdirSync(join(root, "scripts"))
-  .filter((name) => name.endsWith(".js"))
+  .filter((name) => name.endsWith(".ts"))
   .sort();
 const listed = new Set(catalog.scripts.map((script) => script.file));
 for (const name of onDisk) {
@@ -72,20 +72,15 @@ for (const script of catalog.scripts) {
   if (typeof script.summary !== "string" || script.summary === "") {
     fail(`${where}: summary が空 —— 一覧で何をするものか分からなくなる`);
   }
+  if (typeof script.file !== "string" || !script.file.endsWith(".ts")) {
+    fail(`${where}: file は scripts/ の .ts を指すこと (いまは ${String(script.file)})`);
+  }
 
   let source;
   try {
     source = readFileSync(join(root, script.file), "utf8");
   } catch {
     fail(`${where}: ${String(script.file)} が無い`);
-    continue;
-  }
-
-  try {
-    execFileSync(process.execPath, ["--check", join(root, script.file)], { stdio: "pipe" });
-  } catch (error) {
-    const detail = String(error.stderr ?? error).split("\n").slice(0, 3).join(" / ");
-    fail(`${where}: JS として読めない —— ${detail}`);
     continue;
   }
 
@@ -109,6 +104,4 @@ if (problems.length > 0) {
   process.exit(1);
 }
 
-process.stdout.write(
-  `\n✓ check passed: ${String(rows.length)} 本とも読めて、catalog.json と一致している\n`,
-);
+process.stdout.write(`\n✓ check passed: ${String(rows.length)} 本とも catalog.json と一致している\n`);

@@ -16,9 +16,9 @@
 (async () => {
   const opts = globalThis.__bh.opts["autofetch"] ?? {};
   const maxUrls = Number(opts.maxUrls ?? 2000);
-  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-  const toAbsolute = (url, base) => {
+  const toAbsolute = (url: string, base?: string): string | null => {
     try {
       return new URL(url, base ?? document.baseURI).href;
     } catch {
@@ -26,8 +26,8 @@
     }
   };
 
-  const urls = new Set();
-  const push = (u) => {
+  const urls = new Set<string>();
+  const push = (u: string | null | undefined) => {
     const abs = u && toAbsolute(u);
     if (abs) urls.add(abs);
   };
@@ -38,7 +38,7 @@
   // `currentSrc` は、取り込み時の viewport と DPR のもとでブラウザがその要素に対して
   // 実際に選んだ 1 つ。それ以外に集めたものは、ブラウザが要求することのなかった変種 ——
   // そしてそこを埋めるのがこのスクリプトの存在理由なので、数える価値がある。
-  const chosen = new Set();
+  const chosen = new Set<string>();
   for (const el of Array.from(nodes)) {
     for (const attr of ["src", "data-src", "data-lazy-src", "poster"]) {
       push(el.getAttribute(attr));
@@ -49,12 +49,16 @@
       // "url 1x, url 2x, url 480w" → カンマ区切りの候補それぞれから URL を取る
       for (const candidate of v.split(",")) push(candidate.trim().split(/\s+/)[0]);
     }
-    if (el.currentSrc) chosen.add(el.currentSrc);
+    // `currentSrc` を持つのは img と video/audio だけ (型がそう言う。Element には無い)。
+    // 他の要素では空で、JS だった頃も undefined を読んで飛ばしていた。
+    const current =
+      el instanceof HTMLImageElement || el instanceof HTMLMediaElement ? el.currentSrc : "";
+    if (current) chosen.add(current);
   }
   const fromElements = urls.size;
 
   for (const sheet of Array.from(document.styleSheets)) {
-    let rules = null;
+    let rules: CSSRuleList | null = null;
     try {
       rules = sheet.cssRules; // cross-origin のシートは throw する → 飛ばす
     } catch {
@@ -62,7 +66,7 @@
     }
     if (!rules) continue;
     for (const rule of Array.from(rules)) {
-      for (const m of (rule.cssText || "").matchAll(/url\((['"]?)([^'")]+)\1\)/g)) {
+      for (const m of rule.cssText.matchAll(/url\((['"]?)([^'")]+)\1\)/g)) {
         const abs = m[2] && toAbsolute(m[2], sheet.href ?? undefined);
         if (abs && !abs.startsWith("data:")) urls.add(abs);
       }

@@ -4,13 +4,13 @@
     {
       "id": "autoscroll",
       "phase": "behavior",
-      "file": "scripts/autoscroll.js",
+      "file": "scripts/autoscroll.ts",
       "summary": "全高までスクロールして遅延読み込みを発火させる"
     },
     {
       "id": "autofetch",
       "phase": "behavior",
-      "file": "scripts/autofetch.js",
+      "file": "scripts/autofetch.ts",
       "summary": "srcset の全候補・data-* を能動的に取りに行く"
     }
   ]

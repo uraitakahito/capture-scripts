@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "target": "es2023",
+    "module": "esnext",
+    "lib": ["es2023", "dom"],
+    "types": [],
+    "strict": true,
+    "erasableSyntaxOnly": true,
+    "noEmit": true
+  },
+  "include": ["scripts/*.ts", "types/host.d.ts"]
+}
