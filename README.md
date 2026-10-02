@@ -124,5 +124,5 @@ pnpm run scripts list
 
 ## リリース
 
-`develop` に入れ、`develop → main` の PR（merge commit）で出し、その merge commit に
-注釈タグを打つ。消費者は**タグの付いたコミットしか指せない**（submodule の規約）。
+`main` に PR を squash でマージし、
+出す commit に注釈タグを打つ。消費者は**タグの付いたコミットしか指せない**（submodule の規約）。
