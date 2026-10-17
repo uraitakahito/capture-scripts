@@ -11,6 +11,10 @@ declare var __bh: {
   opts: Record<string, Record<string, unknown> | undefined>;
   /** 残り時間 (ms)。**協調的** —— 見なければ止まらないし、止めてもくれない */
   remainingMs: number;
-  /** 1 スクリプト 1 行。id と経過 ms は受け皿が付ける。WACZ の behaviors/custom.jsonl に残る */
+  /**
+   * 1 スクリプト 1 行。id と経過 ms は受け皿が付ける。行は BrowserHive のログに出るだけで、
+   * custom.jsonl には残らない (残るのは送った source)。reachedBottom と scrollSteps を
+   * 述べた行は、datapackage.json の coverage になる
+   */
   report(id: string, data: unknown): void;
 };
