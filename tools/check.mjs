@@ -6,7 +6,11 @@
  *
  * 1. **catalog.json と実体が一致するか** —— 列挙された `file` が在る / `scripts/` の
  *    `.ts` が全部列挙されている / `id` が重複しない / `phase` が 2 値のどちらか。
- * 2. **sha256 を印字する** —— 台帳 (`pnpm run scripts list`) に並ぶ digest と、
+ * 2. **サイト用の札 (`sites`) の形** —— 書くなら小文字のホスト名を 1 本以上・重複なし
+ *    (台帳の CHECK と同じ式)。札のホスト名が source に `"…"` で出てこなければ止める ——
+ *    サイト用の台本も、選ばれればどの頁でも走る。冒頭で `location.hostname` と比べる行の
+ *    書き忘れを、ここで拾う。
+ * 3. **sha256 を印字する** —— 台帳 (`pnpm run scripts list`) に並ぶ digest と、
  *    目で突き合わせられるように。台帳が打つのは、書いたままの TS のバイト列に対する値。
  *
  * ## 何を見ないか
@@ -28,14 +32,16 @@ import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const PHASES = new Set(["preload", "behavior"]);
+/** 札の形。小文字の ASCII のホスト名 (IDN は punycode)。台帳の CHECK (capture-ledger の 021) と同じ式 */
+const HOSTNAME = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/;
 
 const problems = [];
 const fail = (message) => problems.push(message);
 
-/** @type {{ profile: string, scripts: { id: string, phase: string, file: string, summary: string }[] }} */
+/** @type {{ profile: string, scripts: { id: string, phase: string, file: string, summary: string, sites?: string[] }[] }} */
 const catalog = JSON.parse(readFileSync(join(root, "catalog.json"), "utf8"));
 
-if (catalog.profile !== "capture-scripts/1") {
+if (catalog.profile !== "capture-scripts/2") {
   fail(`catalog.json の profile が知らない綴り: ${String(catalog.profile)}`);
 }
 
@@ -75,6 +81,20 @@ for (const script of catalog.scripts) {
   if (typeof script.file !== "string" || !script.file.endsWith(".ts")) {
     fail(`${where}: file は scripts/ の .ts を指すこと (いまは ${String(script.file)})`);
   }
+  // 札は省ける (どこでも走る台本)。書くなら、小文字のホスト名を 1 本以上・重複なしで
+  const sites = script.sites ?? [];
+  if (script.sites !== undefined) {
+    if (!Array.isArray(script.sites) || script.sites.length === 0) {
+      fail(`${where}: sites は 1 本以上のホスト名の列 (省けばどこでも走る)`);
+    } else {
+      for (const site of script.sites) {
+        if (typeof site !== "string" || !HOSTNAME.test(site)) {
+          fail(`${where}: sites の ${JSON.stringify(site)} は小文字のホスト名ではない (ポート・scheme・* は書けない)`);
+        }
+      }
+      if (new Set(script.sites).size !== script.sites.length) fail(`${where}: sites に同じホスト名が 2 度ある`);
+    }
+  }
 
   let source;
   try {
@@ -84,9 +104,17 @@ for (const script of catalog.scripts) {
     continue;
   }
 
+  // 札のホスト名が source に無い = 見分けの行の書き忘れ。サイト用でも、選ばれればどの頁でも走るので
+  for (const site of Array.isArray(sites) ? sites : []) {
+    if (typeof site === "string" && !source.includes(`"${site}"`)) {
+      fail(`${where}: "${site}" が ${script.file} に無い —— 冒頭で location.hostname と比べること`);
+    }
+  }
+
   rows.push({
     id: script.id,
     phase: script.phase,
+    sites: Array.isArray(sites) ? sites : [],
     bytes: Buffer.byteLength(source, "utf8"),
     sha256: createHash("sha256").update(source, "utf8").digest("hex"),
   });
@@ -94,7 +122,9 @@ for (const script of catalog.scripts) {
 
 for (const row of rows) {
   process.stdout.write(
-    `  ${row.id.padEnd(16)} ${row.phase.padEnd(9)} ${String(row.bytes).padStart(6)} B  sha256:${row.sha256}\n`,
+    `  ${row.id.padEnd(16)} ${row.phase.padEnd(9)} ${String(row.bytes).padStart(6)} B  sha256:${row.sha256}` +
+      (row.sites.length === 0 ? "" : `  sites:${row.sites.join(",")}`) +
+      "\n",
   );
 }
 
