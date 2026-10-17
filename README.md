@@ -21,9 +21,9 @@ capture-scripts  ──→  capture-ledger の目録  ──→  Windmill の fl
 |---|---|
 | `scripts/*.ts` | ページの中で走らせるスクリプト。書いたままのバイト列が目録に入る |
 | `types/host.d.ts` | 受け皿 `__bh` の型。[ts-compile-service](https://github.com/uraitakahito/ts-compile-service) にも写される（下の「2 つの門番」） |
-| `catalog.json` | ソースが自分では言えないこと —— `id` と `phase`、一言の `summary` |
+| `catalog.json` | ソースが自分では言えないこと —— `id` と `phase`、一言の `summary`、サイト用なら `sites` |
 | `tsconfig.json` | strict と `erasableSyntaxOnly`。enum のような「剥がして消えない構文」を書かせない |
-| `tools/check.mjs` | `pnpm run check` の後半。catalog と一致するか・sha256 はいくつか（前半は tsc） |
+| `tools/check.mjs` | `pnpm run check` の後半。catalog と一致するか・札（`sites`）の形・sha256 はいくつか（前半は tsc） |
 
 runtime の依存は無い。台帳が読むのは書いたままの TS のバイト列そのもので、それに `sha256` を打つ。
 JS への変換は Windmill の flow の中で ts-compile-service がクロールの段ごとに行い、BrowserHive は
@@ -93,6 +93,45 @@ globalThis.__bh = {
 無ければ運用する人が `--phase` で手打ちすることになり、打ち間違えると
 「遷移の前に入れるはずのコードが、読み込みの後に 1 回だけ走って、しかも成功する」。
 
+## サイト用の台本 —— `sites`
+
+決まったサイトの頁でだけ意味のある台本には、`catalog.json` に札 `sites`（ホスト名の列）を書く。
+札を省いた台本は、今までどおりどこでも走る。
+
+```json
+{
+  "id": "example-results",
+  "phase": "behavior",
+  "file": "scripts/example-results.ts",
+  "sites": ["www.example.com"],
+  "summary": "www.example.com の検索結果の頁で、見出しを報告する"
+}
+```
+
+札を書ける形は `profile` が `capture-scripts/2` の catalog で、capture-ledger は v0.61.0 から読む
+（それより前の台帳は `/2` を断るので、札を黙って捨てることはない）。
+
+**札を使うのは台帳。** capture-ledger は札のある台本を、クロールの起点のどれかがそのサイトに
+あるときだけ入れる —— `scripts` を省いたクロールでは起点に合う物を自分で選び、起点に合わない
+物を名指せば 400 で断る。dashboard は札を見せ、起こす面で同じ決まりのとおりに選ぶ。
+
+- **書けるのは小文字のホスト名だけ。** IDN は punycode で書く。ポート・scheme・`*` は書けない。
+  照らすのは起点の `new URL(…).hostname` との完全一致で、`example.com` と `www.example.com` は別
+  （両方要るなら両方書く）
+- **見分けの行も書く。** 決まりはクロールの単位で、リンクを辿って別のホストへ出た頁でも、台本は走る。
+  冒頭で `location.hostname` と比べ、違えば何もしないで終わる。`pnpm run check` は、札のホスト名が
+  source に `"…"` で出てこなければ止める（見分けの行の書き忘れ）
+
+```ts
+(() => {
+  if (location.hostname !== "www.example.com") return;
+  globalThis.__bh.report("example-results", { title: document.title });
+})();
+```
+
+**撮れないサイトの台本は足さない。** 台帳のクロールは robots.txt を守るので、robots が断る頁
+（たとえば Google の `/search`）では、台本は 1 度も走らない。
+
 ## 使う
 
 台帳の目録へまとめて入れる（capture-ledger 側）:
@@ -108,8 +147,8 @@ pnpm run scripts list
 ## 足す
 
 1. `scripts/<id>.ts` を書く（上の作法 3 つ）
-2. `catalog.json` に `id` / `phase` / `file` / `summary` を足す
-3. `pnpm run check`（tsc → catalog の一致 → sha256 の印字）
+2. `catalog.json` に `id` / `phase` / `file` / `summary` を足す（サイト用なら `sites` も）
+3. `pnpm run check`（tsc → catalog の一致と札の形 → sha256 の印字）
 4. 目録へ入れ直す
 
 ## この検査が言えないこと
