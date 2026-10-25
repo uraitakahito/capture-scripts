@@ -8,7 +8,7 @@
  *    `.ts` が全部列挙されている / `id` が重複しない / `phase` が 2 値のどちらか。
  * 2. **サイト用の札 (`sites`) の形** —— 書くなら小文字のホスト名を 1 本以上・重複なし
  *    (台帳の CHECK と同じ式)。札のホスト名が source に `"…"` で出てこなければ止める ——
- *    サイト用の台本も、選ばれればどの頁でも走る。冒頭で `location.hostname` と比べる行の
+ *    サイト用のスクリプトも、選ばれればどの頁でも走る。冒頭で `location.hostname` と比べる行の
  *    書き忘れを、ここで拾う。
  * 3. **sha256 を印字する** —— 台帳 (`pnpm run scripts list`) に並ぶ digest と、
  *    目で突き合わせられるように。台帳が打つのは、書いたままの TS のバイト列に対する値。
@@ -81,7 +81,7 @@ for (const script of catalog.scripts) {
   if (typeof script.file !== "string" || !script.file.endsWith(".ts")) {
     fail(`${where}: file は scripts/ の .ts を指すこと (いまは ${String(script.file)})`);
   }
-  // 札は省ける (どこでも走る台本)。書くなら、小文字のホスト名を 1 本以上・重複なしで
+  // 札は省ける (どこでも走るスクリプト)。書くなら、小文字のホスト名を 1 本以上・重複なしで
   const sites = script.sites ?? [];
   if (script.sites !== undefined) {
     if (!Array.isArray(script.sites) || script.sites.length === 0) {
