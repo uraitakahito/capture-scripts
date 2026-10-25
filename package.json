@@ -10,7 +10,7 @@
   ],
   "version": "0.1.0",
   "private": true,
-  "description": "BrowserHive のページの中で走らせるスクリプト。TypeScript で書き、capture-ledger の目録が配り、ts-compile-service が JS にする",
+  "description": "BrowserHive のページの中で走らせるスクリプト。TypeScript で書き、capture-ledger が配り、ts-compile-service が JS にする",
   "type": "module",
   "engines": {
     "node": ">=24"

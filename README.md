@@ -7,23 +7,23 @@ BrowserHive が取り込むページの中で走らせるスクリプト。TypeS
 受け皿すら注入されない —— **それでも取り込みは成功し、アーカイブも出る**。
 
 走らせるものを決めるのは頼む側で、その「走らせてよいものの一覧」がここに在る。
-配るのは [capture-ledger](https://github.com/uraitakahito/capture-ledger) の目録
+配るのは [capture-ledger](https://github.com/uraitakahito/capture-ledger)
 （`scripts` 表）で、この repo はその**出どころ**。
 
 ```
-capture-scripts  ──→  capture-ledger の目録  ──→  Windmill の flow  ──→  ts-compile-service  ──→  BrowserHive  ──→  ページ
- (TS と phase)          (TS の版を固定する)       (運ぶだけ)          (型検査して JS に)      (JS を評価する)
+capture-scripts  ──→  capture-ledger（台帳）  ──→  Windmill の flow  ──→  ts-compile-service  ──→  BrowserHive  ──→  ページ
+ (TS と phase)          (TS の版を固定する)        (運ぶだけ)          (型検査して JS に)      (JS を評価する)
 ```
 
 ## 中身
 
 | | |
 |---|---|
-| `scripts/*.ts` | ページの中で走らせるスクリプト。書いたままのバイト列が目録に入る |
+| `scripts/*.ts` | ページの中で走らせるスクリプト。書いたままのバイト列が台帳に入る |
 | `types/host.d.ts` | 受け皿 `__bh` の型。[ts-compile-service](https://github.com/uraitakahito/ts-compile-service) にも写される（下の「2 つの門番」） |
 | `catalog.json` | ソースが自分では言えないこと —— `id` と `phase`、一言の `summary`、サイト用なら `sites` |
 | `tsconfig.json` | strict と `erasableSyntaxOnly`。enum のような「剥がして消えない構文」を書かせない |
-| `tools/check.mjs` | `pnpm run check` の後半。catalog と一致するか・札（`sites`）の形・sha256 はいくつか（前半は tsc） |
+| `tools/check.mjs` | `pnpm run check` の後半。`catalog.json` と一致するか・札（`sites`）の形・sha256 はいくつか（前半は tsc） |
 
 runtime の依存は無い。台帳が読むのは書いたままの TS のバイト列そのもので、それに `sha256` を打つ。
 JS への変換は Windmill の flow の中で ts-compile-service がクロールの段ごとに行い、BrowserHive は
@@ -31,9 +31,9 @@ JS への変換は Windmill の flow の中で ts-compile-service がクロー�
 
 ## 2 つの門番 —— 型が通らない TS は走らない
 
-1. **この repo の CI** (`tsc --noEmit`)。型が通らなければ tag にならず、目録にも入らない
+1. **この repo の CI** (`tsc --noEmit`)。型が通らなければ tag にならず、台帳にも入らない
 2. **ts-compile-service**。クロールの段ごとに同じ tsconfig で型検査し、通らなければ 422 を返して段ごと落とす
-   （目録は CLI でも足せるので、tag を経ない道にも門番が要る）
+   （台帳には CLI でも足せるので、tag を経ない道にも門番が要る）
 
 受け皿の型 `types/host.d.ts` は 2 か所に在る（ここと ts-compile-service）。**直すならここが正**で、
 あちらの CI が tag の raw と 1 バイトも違わないことを見る。
@@ -75,7 +75,7 @@ globalThis.__bh = {
 ```
 
 **既定値はソースの中にしか置かない。** `catalog.json` に写すと 2 か所になり、必ず片方が腐る。
-配備ごとに変えたい値は、目録に入れるときに渡すもの（`--options`）で、スクリプトの性質ではない。
+配備ごとに変えたい値は、台帳に入れるときに渡すもの（`--options`）で、スクリプトの性質ではない。
 
 ## 2 つの口 —— `phase`
 
@@ -93,10 +93,10 @@ globalThis.__bh = {
 無ければ運用する人が `--phase` で手打ちすることになり、打ち間違えると
 「遷移の前に入れるはずのコードが、読み込みの後に 1 回だけ走って、しかも成功する」。
 
-## サイト用の台本 —— `sites`
+## サイト用のスクリプト —— `sites`
 
-決まったサイトの頁でだけ意味のある台本には、`catalog.json` に札 `sites`（ホスト名の列）を書く。
-札を省いた台本は、今までどおりどこでも走る。
+決まったサイトの頁でだけ意味のあるスクリプトには、`catalog.json` に札 `sites`（ホスト名の列）を書く。
+札を省いたスクリプトは、今までどおりどこでも走る。
 
 ```json
 {
@@ -108,17 +108,17 @@ globalThis.__bh = {
 }
 ```
 
-札を書ける形は `profile` が `capture-scripts/2` の catalog で、capture-ledger は v0.61.0 から読む
+札を書ける形は `profile` が `capture-scripts/2` の `catalog.json` で、capture-ledger は v0.61.0 から読む
 （それより前の台帳は `/2` を断るので、札を黙って捨てることはない）。
 
-**札を使うのは台帳。** capture-ledger は札のある台本を、クロールの起点のどれかがそのサイトに
+**札を使うのは台帳。** capture-ledger は札のあるスクリプトを、クロールの起点のどれかがそのサイトに
 あるときだけ入れる —— `scripts` を省いたクロールでは起点に合う物を自分で選び、起点に合わない
 物を名指せば 400 で断る。dashboard は札を見せ、新しいクロールの画面で同じ決まりのとおりに選ぶ。
 
 - **書けるのは小文字のホスト名だけ。** IDN は punycode で書く。ポート・scheme・`*` は書けない。
   照らすのは起点の `new URL(…).hostname` との完全一致で、`example.com` と `www.example.com` は別
   （両方要るなら両方書く）
-- **見分けの行も書く。** 決まりはクロールの単位で、リンクを辿って別のホストへ出た頁でも、台本は走る。
+- **見分けの行も書く。** 決まりはクロールの単位で、リンクを辿って別のホストへ出た頁でも、スクリプトは走る。
   冒頭で `location.hostname` と比べ、違えば何もしないで終わる。`pnpm run check` は、札のホスト名が
   source に `"…"` で出てこなければ止める（見分けの行の書き忘れ）
 
@@ -129,27 +129,27 @@ globalThis.__bh = {
 })();
 ```
 
-**撮れないサイトの台本は足さない。** 台帳のクロールは robots.txt を守るので、robots が断る頁
-（たとえば Google の `/search`）では、台本は 1 度も走らない。
+**撮れないサイトのスクリプトは足さない。** 台帳のクロールは robots.txt を守るので、robots が断る頁
+（たとえば Google の `/search`）では、スクリプトは 1 度も走らない。
 
 ## 使う
 
-台帳の目録へまとめて入れる（capture-ledger 側）:
+台帳へまとめて入れる（capture-ledger 側）:
 
 ```sh
 pnpm run scripts import .upstream/capture-scripts
 pnpm run scripts list
 ```
 
-同じバイト列を入れ直しても**版は増えない**。目録が持つのはソースのバイト列で、
+同じバイト列を入れ直しても**版は増えない**。台帳が持つのはソースのバイト列で、
 どのファイルから読んだかではないため。
 
 ## 足す
 
 1. `scripts/<id>.ts` を書く（上の作法 3 つ）
 2. `catalog.json` に `id` / `phase` / `file` / `summary` を足す（サイト用なら `sites` も）
-3. `pnpm run check`（tsc → catalog の一致と札の形 → sha256 の印字）
-4. 目録へ入れ直す
+3. `pnpm run check`（tsc → `catalog.json` との一致と札の形 → sha256 の印字）
+4. 台帳へ入れ直す
 
 ## この検査が言えないこと
 
@@ -159,7 +159,7 @@ pnpm run scripts list
 （capture-fixtures の `/responsive-images` に対して、ブラウザが自分では要求しない
 画像の変種が届いたかを数える）。
 
-ここの検査は「型が通らない TS」と「catalog の食い違い」を止めるためのもの。
+ここの検査は「型が通らない TS」と「`catalog.json` との食い違い」を止めるためのもの。
 
 ## リリース
 
