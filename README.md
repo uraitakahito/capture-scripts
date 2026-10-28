@@ -96,15 +96,16 @@ globalThis.__bh = {
 ## サイト用のスクリプト —— `sites`
 
 決まったサイトの頁でだけ意味のあるスクリプトには、`catalog.json` に札 `sites`（ホスト名の列）を書く。
-札を省いたスクリプトは、今までどおりどこでも走る。
+札を省いたスクリプトは、今までどおりどこでも走る。この repo の見本は `egov-law-search` で、
+[e-Gov 法令検索](https://laws.e-gov.go.jp/)の頁の中で法令名を「セキュリティ」で引き、件数と法令名を報告する。
 
 ```json
 {
-  "id": "example-results",
+  "id": "egov-law-search",
   "phase": "behavior",
-  "file": "scripts/example-results.ts",
-  "sites": ["www.example.com"],
-  "summary": "www.example.com の検索結果の頁で、見出しを報告する"
+  "file": "scripts/egov-law-search.ts",
+  "sites": ["laws.e-gov.go.jp"],
+  "summary": "e-Gov 法令検索で法令名を「セキュリティ」で引き、件数と法令名を報告する"
 }
 ```
 
@@ -123,14 +124,19 @@ globalThis.__bh = {
   source に `"…"` で出てこなければ止める（見分けの行の書き忘れ）
 
 ```ts
-(() => {
-  if (location.hostname !== "www.example.com") return;
-  globalThis.__bh.report("example-results", { title: document.title });
+(async () => {
+  if (location.hostname !== "laws.e-gov.go.jp") return;
+  // …
 })();
 ```
 
 **撮れないサイトのスクリプトは足さない。** 台帳のクロールは robots.txt を守るので、robots が断る頁
 （たとえば Google の `/search`）では、スクリプトは 1 度も走らない。
+
+首相官邸（`www.kantei.go.jp`）も入れていない（2026-10-29 に確かめた）。`HeadlessChrome` と名乗る取得には、
+トップも検索の頁も CSS も 404 を返す（BrowserHive は headless の Chrome で、名乗りを替えない）。
+サイト内検索の答えは Google のプログラム可能検索エンジン（`cse.google.com`）が返し、その robots.txt は
+全部を断り、利用規約の 1.4 は自動の手段で検索を作ることと、答えを残すことを禁じている。
 
 ## 使う
 
