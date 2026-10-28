@@ -12,6 +12,13 @@
       "phase": "behavior",
       "file": "scripts/autofetch.ts",
       "summary": "srcset の全候補・data-* を能動的に取りに行く"
+    },
+    {
+      "id": "egov-law-search",
+      "phase": "behavior",
+      "file": "scripts/egov-law-search.ts",
+      "sites": ["laws.e-gov.go.jp"],
+      "summary": "e-Gov 法令検索で法令名を「セキュリティ」で引き、件数と法令名を報告する"
     }
   ]
 }
