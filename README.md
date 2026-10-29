@@ -21,9 +21,9 @@ capture-scripts  ──→  capture-ledger（台帳）  ──→  Windmill の 
 |---|---|
 | `scripts/*.ts` | ページの中で走らせるスクリプト。書いたままのバイト列が台帳に入る |
 | `types/host.d.ts` | 受け皿 `__bh` の型。[ts-compile-service](https://github.com/uraitakahito/ts-compile-service) にも写される（下の「2 つの門番」） |
-| `catalog.json` | ソースが自分では言えないこと —— `id` と `phase`、一言の `summary`、サイト用なら `sites` |
+| `catalog.json` | ソースが自分では言えないこと —— `id` と `phase`、一言の `summary`、サイト用なら `sites`、既定に入れないなら `default` |
 | `tsconfig.json` | strict と `erasableSyntaxOnly`。enum のような「剥がして消えない構文」を書かせない |
-| `tools/check.mjs` | `pnpm run check` の後半。`catalog.json` と一致するか・札（`sites`）の形・sha256 はいくつか（前半は tsc） |
+| `tools/check.mjs` | `pnpm run check` の後半。`catalog.json` と一致するか・札（`sites`）と `default` の形・sha256 はいくつか（前半は tsc） |
 
 runtime の依存は無い。台帳が読むのは書いたままの TS のバイト列そのもので、それに `sha256` を打つ。
 JS への変換は Windmill の flow の中で ts-compile-service がクロールの段ごとに行い、BrowserHive は
@@ -109,8 +109,8 @@ globalThis.__bh = {
 }
 ```
 
-札を書ける形は `profile` が `capture-scripts/2` の `catalog.json` で、capture-ledger は v0.61.0 から読む
-（それより前の台帳は `/2` を断るので、札を黙って捨てることはない）。
+いまの `catalog.json` の形は `profile` が `capture-scripts/3` で、capture-ledger は v0.64.0 から読む
+（それより前の台帳は `/3` を断るので、札や `default` を黙って捨てることはない）。
 
 **札を使うのは台帳。** capture-ledger は札のあるスクリプトを、クロールの起点のどれかがそのサイトに
 あるときだけ入れる —— `scripts` を省いたクロールでは起点に合う物を自分で選び、起点に合わない
@@ -138,6 +138,27 @@ globalThis.__bh = {
 サイト内検索の答えは Google のプログラム可能検索エンジン（`cse.google.com`）が返し、その robots.txt は
 全部を断り、利用規約の 1.4 は自動の手段で検索を作ることと、答えを残すことを禁じている。
 
+## 既定に入らないスクリプト —— `default`
+
+`catalog.json` の項目に `"default": false` を書くと、そのスクリプトは台帳の既定に入らない。
+台帳は取り込みのときにこれを `enabled` に写し、`scripts` を省いたクロール（新しいクロールの画面の
+初めのチェックと、毎朝の定期のクロール）では走らせない。名指しすれば走る。省けば既定に入る。
+
+```json
+{
+  "id": "autofetch",
+  "phase": "behavior",
+  "file": "scripts/autofetch.ts",
+  "default": false,
+  "summary": "srcset の全候補・data-* を能動的に取りに行く（既定では走らない）"
+}
+```
+
+いま既定に入らないのは `autofetch` だけ。2026-10-29 の e-Gov 法令検索の取り込みで、`autofetch` が取りに行った
+6 本はどれもブラウザが読み済みで、新しく取れた物は 0 本だった。そのうち `@import` で読まれていた CSS 2 本は、
+`fetch()` で取り直した本文が化けて記録された（BrowserHive の本文の取り方の不具合）。`autofetch` を直すかは、
+BrowserHive の本文の取り方を直した後で考え直す。
+
 ## 使う
 
 台帳へまとめて入れる（capture-ledger 側）:
@@ -153,7 +174,7 @@ pnpm run scripts list
 ## 足す
 
 1. `scripts/<id>.ts` を書く（上の作法 3 つ）
-2. `catalog.json` に `id` / `phase` / `file` / `summary` を足す（サイト用なら `sites` も）
+2. `catalog.json` に `id` / `phase` / `file` / `summary` を足す（サイト用なら `sites`、既定に入れないなら `"default": false` も）
 3. `pnpm run check`（tsc → `catalog.json` との一致と札の形 → sha256 の印字）
 4. 台帳へ入れ直す
 
