@@ -38,10 +38,10 @@ const HOSTNAME = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?
 const problems = [];
 const fail = (message) => problems.push(message);
 
-/** @type {{ profile: string, scripts: { id: string, phase: string, file: string, summary: string, sites?: string[] }[] }} */
+/** @type {{ profile: string, scripts: { id: string, phase: string, file: string, summary: string, sites?: string[], default?: boolean }[] }} */
 const catalog = JSON.parse(readFileSync(join(root, "catalog.json"), "utf8"));
 
-if (catalog.profile !== "capture-scripts/2") {
+if (catalog.profile !== "capture-scripts/3") {
   fail(`catalog.json の profile が知らない綴り: ${String(catalog.profile)}`);
 }
 
@@ -82,6 +82,10 @@ for (const script of catalog.scripts) {
     fail(`${where}: file は scripts/ の .ts を指すこと (いまは ${String(script.file)})`);
   }
   // 札は省ける (どこでも走るスクリプト)。書くなら、小文字のホスト名を 1 本以上・重複なしで
+  // 既定に入るか（台帳の enabled に写る）。省けば入る。真偽値のほかは書けない
+  if (script.default !== undefined && typeof script.default !== "boolean") {
+    fail(`${where}: default は true か false（省けば既定に入る）`);
+  }
   const sites = script.sites ?? [];
   if (script.sites !== undefined) {
     if (!Array.isArray(script.sites) || script.sites.length === 0) {
