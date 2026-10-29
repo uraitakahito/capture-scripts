@@ -1,5 +1,5 @@
 {
-  "profile": "capture-scripts/2",
+  "profile": "capture-scripts/3",
   "scripts": [
     {
       "id": "autoscroll",
@@ -11,7 +11,8 @@
       "id": "autofetch",
       "phase": "behavior",
       "file": "scripts/autofetch.ts",
-      "summary": "srcset の全候補・data-* を能動的に取りに行く"
+      "default": false,
+      "summary": "srcset の全候補・data-* を能動的に取りに行く（既定では走らない）"
     },
     {
       "id": "egov-law-search",
