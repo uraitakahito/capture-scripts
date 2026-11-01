@@ -18,7 +18,7 @@ declare var __bh: {
   /**
    * クロールごとのシークレット。`params`（kind: secret）で宣言した名前を引く。値は文字列だけで、
    * 渡されなければ undefined。記録（WACZ・台帳・ログ）に残るのは名前だけ —— ただし頁の中では隠せず、
-   * 網に送れば WARC には残る
+   * 通信に載せれば（URL や本文に書けば）WARC には残る
    */
   secrets: Readonly<Record<string, string | undefined>>;
   /** 残り時間 (ms)。**協調的** —— 見なければ止まらないし、止めてもくれない */
