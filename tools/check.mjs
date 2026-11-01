@@ -10,7 +10,11 @@
  *    (台帳の CHECK と同じ式)。札のホスト名が source に `"…"` で出てこなければ止める ——
  *    サイト用のスクリプトも、選ばれればどの頁でも走る。冒頭で `location.hostname` と比べる行の
  *    書き忘れを、ここで拾う。
- * 3. **sha256 を印字する** —— 台帳 (`pnpm run scripts list`) に並ぶ digest と、
+ * 3. **クロールごとの値の宣言 (`params`) の形と、source との一致** —— name の綴り・kind・required・
+ *    summary・重複・知らない鍵 (既定値はソースの中にしか置かない)。宣言した名前は source が
+ *    `__bh.vars.<名前>` / `__bh.secrets.<名前>` で読んでいること、逆に読んでいる名前は宣言に在ること
+ *    (コメントは除いて見る。`["名前"]` の形は見ない)。書き忘れと綴り違いを、台帳に入れる前に止める。
+ * 4. **sha256 を印字する** —— 台帳 (`pnpm run scripts list`) に並ぶ digest と、
  *    目で突き合わせられるように。台帳が打つのは、書いたままの TS のバイト列に対する値。
  *
  * ## 何を見ないか
@@ -30,18 +34,53 @@ import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import ts from "typescript";
+
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const PHASES = new Set(["preload", "behavior"]);
 /** 札の形。小文字の ASCII のホスト名 (IDN は punycode)。台帳の CHECK (capture-ledger の 021) と同じ式 */
 const HOSTNAME = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/;
+/** 値の名前の形。台帳の schema と BrowserHive の契約 (ValueName) と同じ式。長さは 64 字まで */
+const PARAM_NAME = /^[a-z][a-z0-9_]*$/;
+const PARAM_NAME_MAX = 64;
+/** 宣言の種類と、受け皿のどのメンバで読むか */
+const PARAM_KINDS = { variable: "vars", secret: "secrets" };
+const PARAM_KEYS = new Set(["name", "kind", "required", "summary"]);
+
+/**
+ * コメントを除いた source。宣言と読む所の突き合わせに使う —— doc comment に書いた
+ * `__bh.vars.query` を「読んでいる」と数えないため。tsc の scanner で token だけを拾う
+ * (正規表現で `//` を消すと、文字列の中の URL まで消える)。token の間は空白 1 つ。
+ */
+const withoutComments = (code) => {
+  const scanner = ts.createScanner(ts.ScriptTarget.Latest, true, ts.LanguageVariant.Standard, code);
+  const tokens = [];
+  for (let kind = scanner.scan(); kind !== ts.SyntaxKind.EndOfFileToken; kind = scanner.scan()) {
+    tokens.push(scanner.getTokenText());
+  }
+  return tokens.join(" ");
+};
+
+/** source が `__bh.vars.<名前>` / `__bh.secrets.<名前>` で読んでいる名前。token の間の空白を許す */
+const readNames = (code) => {
+  const names = { vars: new Set(), secrets: new Set() };
+  for (const m of withoutComments(code).matchAll(/__bh\s*\.\s*(vars|secrets)\s*\.\s*([A-Za-z_$][\w$]*)/g)) {
+    names[m[1]].add(m[2]);
+  }
+  return names;
+};
 
 const problems = [];
 const fail = (message) => problems.push(message);
 
-/** @type {{ profile: string, scripts: { id: string, phase: string, file: string, summary: string, sites?: string[], default?: boolean }[] }} */
+/**
+ * @typedef {{ name: string, kind: "variable" | "secret", required?: boolean, summary: string }} Param
+ *   クロールごとの値の宣言。既定値は書けない (ソースの中にだけ置く)
+ * @type {{ profile: string, scripts: { id: string, phase: string, file: string, summary: string, sites?: string[], default?: boolean, params?: Param[] }[] }}
+ */
 const catalog = JSON.parse(readFileSync(join(root, "catalog.json"), "utf8"));
 
-if (catalog.profile !== "capture-scripts/3") {
+if (catalog.profile !== "capture-scripts/4") {
   fail(`catalog.json の profile が知らない綴り: ${String(catalog.profile)}`);
 }
 
@@ -100,12 +139,65 @@ for (const script of catalog.scripts) {
     }
   }
 
+  // クロールごとの値の宣言。省けば値を読まないスクリプト。書くなら列で、1 つずつ形を見る。
+  // 既定値は書けない —— 知らない鍵 (default・value …) はここで止める (README「既定値はソースの中にしか置かない」)
+  /** @type {Record<"vars" | "secrets", Set<string>>} */
+  const declared = { vars: new Set(), secrets: new Set() };
+  if (script.params !== undefined) {
+    if (!Array.isArray(script.params)) {
+      fail(`${where}: params は宣言の列 (省けばクロールごとの値を読まないスクリプト)`);
+    } else {
+      const names = new Set();
+      for (const param of script.params) {
+        if (param === null || typeof param !== "object" || Array.isArray(param)) {
+          fail(`${where}: params の項目は { name, kind, summary } の object (いまは ${JSON.stringify(param)})`);
+          continue;
+        }
+        const label = `${where}: params の ${typeof param.name === "string" ? param.name : JSON.stringify(param.name)}`;
+        if (typeof param.name !== "string" || !PARAM_NAME.test(param.name) || param.name.length > PARAM_NAME_MAX) {
+          fail(`${label}: name は英小文字で始め、英小文字・数字・_ で ${String(PARAM_NAME_MAX)} 字まで`);
+        }
+        if (!(param.kind in PARAM_KINDS)) {
+          fail(`${label}: kind は variable か secret (いまは ${String(param.kind)})`);
+        }
+        if (param.required !== undefined && typeof param.required !== "boolean") {
+          fail(`${label}: required は true か false (省けば false)`);
+        }
+        if (typeof param.summary !== "string" || param.summary === "") {
+          fail(`${label}: summary が空 —— 値を入れる欄に何を書くか分からなくなる`);
+        }
+        for (const key of Object.keys(param)) {
+          if (!PARAM_KEYS.has(key)) fail(`${label}: 知らない鍵 ${key} (既定値はソースの中にしか置かない)`);
+        }
+        if (names.has(param.name)) fail(`${label}: 同じ名前が 2 度ある`);
+        names.add(param.name);
+        if (typeof param.name === "string" && param.kind in PARAM_KINDS) declared[PARAM_KINDS[param.kind]].add(param.name);
+      }
+    }
+  }
+
   let source;
   try {
     source = readFileSync(join(root, script.file), "utf8");
   } catch {
     fail(`${where}: ${String(script.file)} が無い`);
     continue;
+  }
+
+  // 宣言と source の一致。宣言した名前を読んでいない = 書き忘れ、読んでいるのに宣言が無い = 綴り違いか宣言の忘れ。
+  // どちらも台帳に入った後では、頁の中で undefined を読むだけで誰も気づかない
+  const reads = readNames(source);
+  for (const member of /** @type {const} */ (["vars", "secrets"])) {
+    for (const name of declared[member]) {
+      if (!reads[member].has(name)) {
+        fail(`${where}: params の ${name} を ${script.file} が __bh.${member}.${name} で読んでいない`);
+      }
+    }
+    for (const name of reads[member]) {
+      if (!declared[member].has(name)) {
+        fail(`${where}: ${script.file} が __bh.${member}.${name} を読むが、params に宣言が無い`);
+      }
+    }
   }
 
   // 札のホスト名が source に無い = 見分けの行の書き忘れ。サイト用でも、選ばれればどの頁でも走るので
@@ -119,6 +211,8 @@ for (const script of catalog.scripts) {
     id: script.id,
     phase: script.phase,
     sites: Array.isArray(sites) ? sites : [],
+    vars: [...declared.vars],
+    secrets: [...declared.secrets],
     bytes: Buffer.byteLength(source, "utf8"),
     sha256: createHash("sha256").update(source, "utf8").digest("hex"),
   });
@@ -128,6 +222,8 @@ for (const row of rows) {
   process.stdout.write(
     `  ${row.id.padEnd(16)} ${row.phase.padEnd(9)} ${String(row.bytes).padStart(6)} B  sha256:${row.sha256}` +
       (row.sites.length === 0 ? "" : `  sites:${row.sites.join(",")}`) +
+      (row.vars.length === 0 ? "" : `  vars:${row.vars.join(",")}`) +
+      (row.secrets.length === 0 ? "" : `  secrets:${row.secrets.join(",")}`) +
       "\n",
   );
 }

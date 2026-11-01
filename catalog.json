@@ -1,5 +1,5 @@
 {
-  "profile": "capture-scripts/3",
+  "profile": "capture-scripts/4",
   "scripts": [
     {
       "id": "autoscroll",
@@ -19,7 +19,10 @@
       "phase": "behavior",
       "file": "scripts/egov-law-search.ts",
       "sites": ["laws.e-gov.go.jp"],
-      "summary": "e-Gov 法令検索で法令名を「セキュリティ」で引き、件数と法令名を報告する"
+      "params": [
+        { "name": "query", "kind": "variable", "required": false, "summary": "法令名の検索語。省けばソースの既定" }
+      ],
+      "summary": "e-Gov 法令検索で法令名を引き（語は変数 query。既定はセキュリティ）、件数と法令名を報告する"
     }
   ]
 }

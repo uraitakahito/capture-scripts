@@ -7,14 +7,16 @@
  * 頁の中で `/result` に切り替わる)。取り込む文書は起点の頁のまま —— JS で頁を移ると、去った
  * 文書は本文の無い応答として archive に残る。
  *
- * 設定は `__bh.opts["egov-law-search"]` から: query (既定 "セキュリティ") / waitMs (待つ上限。既定 10000)
+ * 検索語は変数 `__bh.vars.query` が先 (`catalog.json` の `params` で宣言。クロールを始める頼みで渡す)。
+ * 無ければ版の設定 `__bh.opts["egov-law-search"].query`、それも無ければ "セキュリティ"。
+ * waitMs (待つ上限。既定 10000) は版の設定のまま
  */
 (async () => {
   // 決まりはクロールの単位なので、リンクを辿って別のホストへ出た頁でも走る
   if (location.hostname !== "laws.e-gov.go.jp") return;
   const id = "egov-law-search";
   const opts = globalThis.__bh.opts[id] ?? {};
-  const query = String(opts.query ?? "セキュリティ");
+  const query = String(globalThis.__bh.vars.query ?? opts.query ?? "セキュリティ");
   const waitMs = Number(opts.waitMs ?? 10000);
   const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
