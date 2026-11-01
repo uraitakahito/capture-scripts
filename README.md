@@ -21,9 +21,9 @@ capture-scripts  ──→  capture-ledger（台帳）  ──→  Windmill の 
 |---|---|
 | `scripts/*.ts` | ページの中で走らせるスクリプト。書いたままのバイト列が台帳に入る |
 | `types/host.d.ts` | 受け皿 `__bh` の型。[ts-compile-service](https://github.com/uraitakahito/ts-compile-service) にも写される（下の「2 つの門番」） |
-| `catalog.json` | ソースが自分では言えないこと —— `id` と `phase`、一言の `summary`、サイト用なら `sites`、既定に入れないなら `default` |
+| `catalog.json` | ソースが自分では言えないこと —— `id` と `phase`、一言の `summary`、サイト用なら `sites`、既定に入れないなら `default`、クロールごとの値を読むなら `params` |
 | `tsconfig.json` | strict と `erasableSyntaxOnly`。enum のような「剥がして消えない構文」を書かせない |
-| `tools/check.mjs` | `pnpm run check` の後半。`catalog.json` と一致するか・札（`sites`）と `default` の形・sha256 はいくつか（前半は tsc） |
+| `tools/check.mjs` | `pnpm run check` の後半。`catalog.json` と一致するか・札（`sites`）と `default` の形・`params` の形と source との一致・sha256 はいくつか（前半は tsc） |
 
 runtime の依存は無い。台帳が読むのは書いたままの TS のバイト列そのもので、それに `sha256` を打つ。
 JS への変換は Windmill の flow の中で ts-compile-service がクロールの段ごとに行い、BrowserHive は
@@ -40,14 +40,21 @@ JS への変換は Windmill の flow の中で ts-compile-service がクロー�
 
 ## 受け皿 —— ページの中で使えるもの
 
-BrowserHive はスクリプトを走らせる前に、**938 バイトの受け皿**を 1 つだけ注入する。
+BrowserHive はスクリプトを走らせる前に、**受け皿 `__bh`** を 1 つだけ注入する。
 ページに現れる同梱のコードはこれだけで、アーカイブの `behaviors/runtime.js` に
-そのまま残る。
+そのまま残る。受け皿のコードは値を含まない定数で（BrowserHive の版が同じなら同じバイト列）、
+予算・版の設定・クロールごとの値は、注入の直後に引数で渡される。
 
 ```js
 globalThis.__bh = {
-  // このスクリプトに渡された値を id で引く。中身は検査されていない
+  // 版の設定（台帳に入れるときの --options）を id で引く。中身は検査されていない
   opts: { autoscroll: { maxSteps: 80 } },
+
+  // クロールごとの変数。catalog.json の params（kind: variable）で宣言した名前。値は文字列で、記録に残る
+  vars: { query: "個人情報" },
+
+  // クロールごとのシークレット。params（kind: secret）で宣言した名前。値は文字列で、記録には名前だけ残る
+  secrets: { api_token: "…" },
 
   // 残り時間 (ms)。**協調的** —— 見なければ止まらないし、止めてもくれない
   get remainingMs() { /* … */ },
@@ -62,7 +69,8 @@ globalThis.__bh = {
 
 ```ts
 (async () => {
-  const opts = globalThis.__bh.opts["あなたの id"] ?? {};   // ① 設定は opts から、既定はソースの中に
+  const opts = globalThis.__bh.opts["あなたの id"] ?? {};   // ① 値は 変数 → 版の設定 → ソースの既定 の順。既定はソースの中に
+  const query = String(globalThis.__bh.vars.query ?? opts.query ?? "既定の語");   // 変数は params で宣言する（下の節）
   const maxSteps = Number(opts.maxSteps ?? 40);
 
   while (/* … */) {
@@ -76,6 +84,8 @@ globalThis.__bh = {
 
 **既定値はソースの中にしか置かない。** `catalog.json` に写すと 2 か所になり、必ず片方が腐る。
 配備ごとに変えたい値は、台帳に入れるときに渡すもの（`--options`）で、スクリプトの性質ではない。
+クロールごとに変えたい値は、`params` で宣言して頼みで渡すもの（下の「クロールごとの値」）。
+`params` にも既定値は書けない（`pnpm run check` が止める）。
 
 ## 2 つの口 —— `phase`
 
@@ -97,7 +107,7 @@ globalThis.__bh = {
 
 決まったサイトの頁でだけ意味のあるスクリプトには、`catalog.json` に札 `sites`（ホスト名の列）を書く。
 札を省いたスクリプトは、今までどおりどこでも走る。この repo の見本は `egov-law-search` で、
-[e-Gov 法令検索](https://laws.e-gov.go.jp/)の頁の中で法令名を「セキュリティ」で引き、件数と法令名を報告する。
+[e-Gov 法令検索](https://laws.e-gov.go.jp/)の頁の中で法令名を引き（語は変数 `query`。既定は「セキュリティ」）、件数と法令名を報告する。
 
 ```json
 {
@@ -105,12 +115,17 @@ globalThis.__bh = {
   "phase": "behavior",
   "file": "scripts/egov-law-search.ts",
   "sites": ["laws.e-gov.go.jp"],
-  "summary": "e-Gov 法令検索で法令名を「セキュリティ」で引き、件数と法令名を報告する"
+  "params": [
+    { "name": "query", "kind": "variable", "required": false, "summary": "法令名の検索語。省けばソースの既定" }
+  ],
+  "summary": "e-Gov 法令検索で法令名を引き（語は変数 query。既定はセキュリティ）、件数と法令名を報告する"
 }
 ```
 
-いまの `catalog.json` の形は `profile` が `capture-scripts/3` で、capture-ledger は v0.64.0 から読む
-（それより前の台帳は `/3` を断るので、札や `default` を黙って捨てることはない）。
+（`params` は後の「クロールごとの値」の節。）
+
+いまの `catalog.json` の形は `profile` が `capture-scripts/4` で、capture-ledger は v0.67.0 から読む
+（それより前の台帳は `/4` を断るので、札や `default` や `params` を黙って捨てることはない）。
 
 **札を使うのは台帳。** capture-ledger は札のあるスクリプトを、クロールの起点のどれかがそのサイトに
 あるときだけ入れる —— `scripts` を省いたクロールでは起点に合う物を自分で選び、起点に合わない
@@ -159,6 +174,37 @@ globalThis.__bh = {
 `fetch()` で取り直した本文が化けて記録された（BrowserHive の本文の取り方の不具合）。`autofetch` を直すかは、
 BrowserHive の本文の取り方を直した後で考え直す。
 
+## クロールごとの値 —— `params`（変数とシークレット）
+
+版の設定（`--options`）は台帳に入れるときに決まり、同じ版のクロールは全部同じ値を読む。
+**クロールごとに変えたい値**（検索語、サイトの鍵）は、`catalog.json` の `params` で読む名前を宣言し、
+スクリプトは受け皿の `__bh.vars.<名前>`（kind が `variable`）か `__bh.secrets.<名前>`（kind が `secret`）で読む。
+この repo の見本は `egov-law-search` の `query`（上の `sites` の節の JSON）。
+
+- `name` は英小文字で始め、英小文字・数字・`_` で 64 字まで（`^[a-z][a-z0-9_]*$`）。名前の空間は台帳の中で 1 つ ——
+  2 本のスクリプトが同じ名前を宣言すれば、同じ値を読む
+- `kind` は `variable`（値は記録に残る。WACZ の `settings.variables`・台帳の行・dashboard）か
+  `secret`（記録に残るのは名前だけ）
+- `required` は省けば false。渡されなければスクリプトは undefined を読む。true の物が無いクロールは台帳が 400 で断る
+- `summary` は値を入れる欄の説明。空は書けない。**既定値は書けない**（既定はソースの中に。知らない鍵は `check` が止める）
+
+**変数は、クロールを始める頼みで渡す**（台帳の `POST /api/crawls` の `variables`。dashboard の新しいクロールの画面は、
+選んだスクリプトの宣言から欄を作る）。宣言に無い名前を渡せば台帳が 400 で断る。値は文字列だけで、数や JSON は
+スクリプトが読み替える。
+
+**シークレットは、人が前もって Windmill の secret 変数 `f/waggle_secrets/<名前>` に置く**
+（置き方は [capture-scheduler](https://github.com/uraitakahito/capture-scheduler) の docs「クロール」）。頼みには書かない。
+台帳は在るかだけを確かめ（無ければ 400 で名前と path を言う）、Windmill の flow が走らせる直前に解いて BrowserHive に渡す。
+値を持つのは Windmill と、走っている頁だけ。
+
+頁の中では隠せない —— 受け皿は頁の JS から読める主ワールドに在る。スクリプトが値を網に送れば、その要求は WARC に残る。
+隠すのは記録（WACZ・台帳・ログ）からだけ。
+
+`pnpm run check` は、宣言した名前がソースに `__bh.vars.<名前>`／`__bh.secrets.<名前>` の形で出ること、逆にソースが
+読む名前が宣言に在ることを見る（コメントは除く。`["名前"]` の形は見ない）。書き忘れと綴り違いを、台帳に入れる前に止める。
+
+この repo にシークレットを読む見本は無い（秘密を要するサイトのスクリプトが無い）。
+
 ## 使う
 
 台帳へまとめて入れる（capture-ledger 側）:
@@ -174,8 +220,8 @@ pnpm run scripts list
 ## 足す
 
 1. `scripts/<id>.ts` を書く（上の作法 3 つ）
-2. `catalog.json` に `id` / `phase` / `file` / `summary` を足す（サイト用なら `sites`、既定に入れないなら `"default": false` も）
-3. `pnpm run check`（tsc → `catalog.json` との一致と札の形 → sha256 の印字）
+2. `catalog.json` に `id` / `phase` / `file` / `summary` を足す（サイト用なら `sites`、既定に入れないなら `"default": false`、クロールごとの値を読むなら `params` も）
+3. `pnpm run check`（tsc → `catalog.json` との一致と札・`params` の形 → sha256 の印字）
 4. 台帳へ入れ直す
 
 ## この検査が言えないこと
