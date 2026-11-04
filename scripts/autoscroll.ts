@@ -6,7 +6,7 @@
  * かつて BrowserHive に同梱されていた built-in の `autoscroll` を、**リクエストで送る形**
  * に書き直したもの。サーバは顔ぶれを持たないので、これを送らなければスクロールは起きない。
  *
- * 設定 (`options_json`) は `__bh.opts["autoscroll"]` から引く:
+ * 設定 (台帳に入れるときの `--options`) は `__bh.opts["autoscroll"]` から引く:
  *   maxSteps (既定 40) / stepDelayMs (既定 250) / idleTimeMs (既定 1000)
  *
  * 報告の 2 つの値は用途が違う。`stopped` はログの中で人が読む文で、いずれ言い回しが
@@ -45,7 +45,7 @@
   window.scrollTo(0, 0); // スクリーンショットのために先頭へ
   await sleep(settleMs); // 走り出したばかりの読み込みを少しだけ待つ
 
-  globalThis.__bh.report("autoscroll", {
+  globalThis.__bh.report({
     stopped: reachedBottom
       ? `bottom reached after ${String(steps)} steps`
       : `maxSteps ${String(maxSteps)} reached — bottom NOT reached`,

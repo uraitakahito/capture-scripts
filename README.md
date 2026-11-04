@@ -59,13 +59,25 @@ globalThis.__bh = {
   // 残り時間 (ms)。**協調的** —— 見なければ止まらないし、止めてもくれない
   get remainingMs() { /* … */ },
 
-  // 1 スクリプト 1 行。id と経過 ms は受け皿が付ける
-  report(id, data) { /* … */ },
+  // 1 行を書く。書いたその場で BrowserHive に届き、取り込みの記録に残る
+  // （どこに残るかは BrowserHive の docs「ログを読む」）。誰の行か（id）と経過 ms は BrowserHive が付け、
+  // シークレットの値は長さに依らず伏せる
+  log: {
+    debug(message, data) { /* … */ },
+    info(message, data) { /* … */ },
+    warn(message, data) { /* … */ },
+    error(message, data) { /* … */ },
+  },
+
+  // スクリプトの結果を 1 回述べる。id は書かない（付けるのは log と同じく BrowserHive）。
+  // 引数が 2 つ（古い report(id, data)）か、data が object でなければ投げる
+  report(data) { /* … */ },
 };
 ```
 
 書くときの作法は 3 つだけ。`globalThis.__bh` は `types/host.d.ts` で型が付いていて、
-綴りを間違えると tsc が止める（`remaining` → "Did you mean 'remainingMs'?"）。
+綴りを間違えると tsc が止める（`remaining` → "Did you mean 'remainingMs'?"）。id を渡す古い
+`report("あなたの id", { … })` も止める（引数が 1 つ多い。TS2554）。
 
 ```ts
 (async () => {
@@ -78,9 +90,13 @@ globalThis.__bh = {
     // …
   }
 
-  globalThis.__bh.report("あなたの id", { /* 何を判断したか */ });  // ③ 報告する
+  globalThis.__bh.log.warn("…が見つからない", { maxSteps });  // ③ 途中の様子は log に書き、
+  globalThis.__bh.report({ /* 何を判断したか */ });           //    結果は report で 1 回述べる（id は書かない）
 })();
 ```
+
+誰の行かは、スクリプトの関数が積んだ stack から BrowserHive が決める。`setTimeout` の中のように
+待たない続きで書いた行も、書いたスクリプトに付く。見本は `egov-law-search` の、検索窓が無いときの `log.warn`。
 
 **既定値はソースの中にしか置かない。** `catalog.json` に写すと 2 か所になり、必ず片方が腐る。
 配備ごとに変えたい値は、台帳に入れるときに渡すもの（`--options`）で、スクリプトの性質ではない。
@@ -97,7 +113,7 @@ globalThis.__bh = {
 | いつ | 読み込みの**後** | 遷移の**前** |
 | どこで | 主フレームだけ | **iframe を含む全フレーム** |
 | 何回 | 1 回 | **遷移のたび** |
-| 受け皿 | 在る（報告できる） | **無い（報告できない）** |
+| 受け皿 | 在る（log と report が使える） | **無い（log も report も使えない）** |
 
 `phase` がここに在ることが、`catalog.json` の存在理由。ソースからは読めないので、
 無ければ運用する人が `--phase` で手打ちすることになり、打ち間違えると
