@@ -37,7 +37,9 @@
   );
   const button = document.querySelector<HTMLButtonElement>('form[role="search"] button.searchbutton');
   if (box === null || button === null) {
-    globalThis.__bh.report(id, { query, searched: false, why: "検索窓が無い" });
+    // 途中の様子は log に書き、report には結果だけを述べる
+    globalThis.__bh.log.warn("検索窓が無い", { waitMs });
+    globalThis.__bh.report({ query, searched: false });
     return;
   }
   // Vue の v-model は input の出来事で値を読む。value を替えるだけでは届かない
@@ -55,7 +57,7 @@
     document.querySelectorAll("a.lawtitle"),
     (a) => a.textContent?.replace(/\s+/g, " ").trim() ?? "",
   );
-  globalThis.__bh.report(id, {
+  globalThis.__bh.report({
     query,
     searched: count !== null,
     hits: count === null ? 0 : Number(count.textContent?.replace(/,/g, "") ?? 0),

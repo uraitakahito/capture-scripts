@@ -89,7 +89,7 @@
     if (n % 16 === 0) await sleep(0); // event loop に息継ぎをさせる
   }
 
-  globalThis.__bh.report("autofetch", {
+  globalThis.__bh.report({
     candidates: urls.size,
     elements: nodes.length,
     neverRequestedByTheBrowser: neverRequested,

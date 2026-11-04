@@ -120,11 +120,11 @@ for (const script of catalog.scripts) {
   if (typeof script.file !== "string" || !script.file.endsWith(".ts")) {
     fail(`${where}: file は scripts/ の .ts を指すこと (いまは ${String(script.file)})`);
   }
-  // 札は省ける (どこでも走るスクリプト)。書くなら、小文字のホスト名を 1 本以上・重複なしで
   // 既定に入るか（台帳の enabled に写る）。省けば入る。真偽値のほかは書けない
   if (script.default !== undefined && typeof script.default !== "boolean") {
     fail(`${where}: default は true か false（省けば既定に入る）`);
   }
+  // 札は省ける (どこでも走るスクリプト)。書くなら、小文字のホスト名を 1 本以上・重複なしで
   const sites = script.sites ?? [];
   if (script.sites !== undefined) {
     if (!Array.isArray(script.sites) || script.sites.length === 0) {
