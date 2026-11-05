@@ -1,15 +1,15 @@
 /**
- * ページが参照 **しうる** 画像の URL を能動的に取りに行く —— `srcset` の候補すべて
- * (1x / 2x、小・中・大)、`data-src` の遅延属性、`poster`、同一 origin のスタイルシートの
- * `url(...)` —— いまの viewport と DPR が選ばなかったものまで含めて。この取得は
- * NetworkRecorder が見ているのと同じネットワーク経路を通るので、そのバイト列は WARC に載る。
+ * ページが参照 **しうる** URL を、走る時点の DOM とスタイルシートから集めて `fetch()` で取りに行く ——
+ * `srcset` の候補 (1x / 2x、小・中・大)、`data-src` の遅延属性、`poster`、同一 origin のスタイルシートの
+ * `url(...)`（絵のほかフォントと `@import` のシートも拾う）—— いまの viewport と DPR が選ばなかったものまで
+ * 含めて。届いた応答は NetworkRecorder が見ているのと同じ経路を通るので、そのバイト列は WARC に載る。
  *
- * かつて BrowserHive に同梱されていた built-in の `autofetch` を、**リクエストで送る形**
- * に書き直したもの。同梱の `ctx.Lib` が無くなったので、使っていた DOM ヘルパは
- * このファイルの中に畳んである。
+ * かつて BrowserHive に同梱されていた built-in の `autofetch` を、**リクエストで送る形** に書き直したもの。
+ * 同梱の `ctx.Lib` が無くなったので、使っていた DOM ヘルパはこのファイルの中に畳んである。
  *
- * これが要る理由: 1280px・DPR 1 の取り込みは `_large` (1x) の候補しか **要求しない** ので、
- * Retina の replay が求める `_2x` が archive に無い。これがそれを引き込む。
+ * これが要る理由: 1 回の取り込みはブラウザが選んだ候補しか **要求しない** ので、Retina の replay が求める版が archive に無い。
+ * 取れない物が 2 つある。走る時点の DOM に無い候補（だから autoscroll の後に走らせる）と、ページの CSP が
+ * `fetch()` を拒む URL（connect-src、無ければ default-src に従う。apple.com/jp の mzstatic。CAPTURE-52）。
  *
  * 設定は `__bh.opts["autofetch"]` から: maxUrls (既定 2000)
  */
@@ -36,8 +36,8 @@
     "img,source,[data-src],[data-srcset],[data-lazy-src],[poster]",
   );
   // `currentSrc` は、取り込み時の viewport と DPR のもとでブラウザがその要素に対して
-  // 実際に選んだ 1 つ。それ以外に集めたものは、ブラウザが要求することのなかった変種 ——
-  // そしてそこを埋めるのがこのスクリプトの存在理由なので、数える価値がある。
+  // 実際に選んだ 1 つ。それ以外に集めたものは、その要素でブラウザが選ばなかった変種と、
+  // スタイルシートの url(...)（ブラウザが読み済みの物も混じる）。currentSrc でない数として数える。
   const chosen = new Set<string>();
   for (const el of Array.from(nodes)) {
     for (const attr of ["src", "data-src", "data-lazy-src", "poster"]) {
@@ -73,14 +73,14 @@
     }
   }
   const fromStyleSheets = urls.size - fromElements;
-  const neverRequested = [...urls].filter((u) => !chosen.has(u)).length;
+  const notCurrentSrc = [...urls].filter((u) => !chosen.has(u)).length;
 
   let n = 0;
   for (const url of urls) {
     if (n >= maxUrls || globalThis.__bh.remainingMs <= 0) break;
     n++;
-    // no-cors にして、cross-origin の CDN にもリクエストが出るようにする。CDP の
-    // NetworkRecorder は CORS に関係なく wire の応答を捕まえる。
+    // no-cors にして、cross-origin の CDN にもリクエストが出るようにする（ページの CSP が拒めば出ない）。
+    // CDP の NetworkRecorder は CORS に関係なく wire の応答を捕まえる。
     try {
       void fetch(url, { mode: "no-cors", credentials: "include" }).catch(() => undefined);
     } catch {
@@ -92,8 +92,8 @@
   globalThis.__bh.report({
     candidates: urls.size,
     elements: nodes.length,
-    neverRequestedByTheBrowser: neverRequested,
+    notCurrentSrc,
     fromStyleSheets,
-    fetched: n,
+    tried: n, // 投げた数。CSP に拒まれた物も数える（結果は待たない）
   });
 })();
