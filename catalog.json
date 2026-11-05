@@ -8,13 +8,6 @@
       "summary": "全高までスクロールして遅延読み込みを発火させる"
     },
     {
-      "id": "autofetch",
-      "phase": "behavior",
-      "file": "scripts/autofetch.ts",
-      "default": false,
-      "summary": "srcset の全候補・data-* を能動的に取りに行く（既定では走らない）"
-    },
-    {
       "id": "egov-law-search",
       "phase": "behavior",
       "file": "scripts/egov-law-search.ts",
@@ -23,6 +16,13 @@
         { "name": "query", "kind": "variable", "required": false, "summary": "法令名の検索語。省けばソースの既定" }
       ],
       "summary": "e-Gov 法令検索で法令名を引き（語は変数 query。既定はセキュリティ）、件数と法令名を報告する"
+    },
+    {
+      "id": "autofetch",
+      "phase": "behavior",
+      "file": "scripts/autofetch.ts",
+      "default": false,
+      "summary": "srcset の全候補・data-* を能動的に取りに行く（既定では走らない）"
     }
   ]
 }
