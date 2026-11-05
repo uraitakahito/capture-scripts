@@ -189,7 +189,7 @@ globalThis.__bh = {
   "phase": "behavior",
   "file": "scripts/autofetch.ts",
   "default": false,
-  "summary": "srcset の全候補・data-* を能動的に取りに行く（既定では走らない）"
+  "summary": "走る時点の srcset の候補・data-* を fetch() で取りに行く（CSP が拒む URL は取れない。既定では走らない）"
 }
 ```
 
@@ -197,6 +197,9 @@ globalThis.__bh = {
 6 本はどれもブラウザが読み済みで、新しく取れた物は 0 本だった。そのうち `@import` で読まれていた CSS 2 本は、
 `fetch()` で取り直した本文が化けて記録された（BrowserHive の本文の取り方の不具合）。`autofetch` を直すかは、
 BrowserHive の本文の取り方を直した後で考え直す。
+
+`fetch()` はページの CSP（Content Security Policy の connect-src、無ければ default-src）に従うので、拒まれる URL は
+取れない。apple.com/jp の mzstatic の絵がそれで、Retina の replay で欠ける（CAPTURE-52）。
 
 ## クロールごとの値 —— `params`（変数とシークレット）
 
