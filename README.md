@@ -23,7 +23,7 @@ capture-scripts  ──→  capture-ledger（台帳）  ──→  Windmill の 
 | `types/host.d.ts` | 受け皿 `__bh` の型。[ts-compile-service](https://github.com/uraitakahito/ts-compile-service) にも写される（下の「2 つの門番」） |
 | `catalog.json` | ソースが自分では言えないこと —— `id` と `phase`、一言の `summary`、サイト用なら `sites`、既定に入れないなら `default`、シークレットを読むなら `params`（変数の `params` はソースの宣言の写し） |
 | `tsconfig.json` | strict と `erasableSyntaxOnly`。enum のような「剥がして消えない構文」を書かせない |
-| `tools/check.mjs` | `pnpm run check` の後半。`catalog.json` と一致するか・札（`sites`）と `default` の形・`params` の形と source との一致・`import` の形・sha256 はいくつか（前半は tsc） |
+| `tools/check.mjs` | `pnpm run check` の後半。`catalog.json` と一致するか・対象サイト（`sites`）と `default` の形・`params` の形と source との一致・`import` の形・sha256 はいくつか（前半は tsc） |
 | `tools/read-params.ts` | `defineParams` の宣言を走らせずに読む係。[ts-compile-service](https://github.com/uraitakahito/ts-compile-service) にも 1 バイトも変えずに写される |
 | `examples/*.ts` | 書き方の見本。配らないので `catalog.json` には載せず、tsc だけが読む |
 
@@ -126,8 +126,8 @@ import { z } from "zod";
 
 ## サイト用のスクリプト —— `sites`
 
-決まったサイトの頁でだけ意味のあるスクリプトには、`catalog.json` に札 `sites`（ホスト名の列）を書く。
-札を省いたスクリプトは、今までどおりどこでも走る。この repo の見本は `egov-law-search` で、
+決まったサイトの頁でだけ意味のあるスクリプトには、`catalog.json` に対象サイト `sites`（ホスト名の列）を書く。
+対象サイトを省いたスクリプトは、今までどおりどこでも走る。この repo の見本は `egov-law-search` で、
 [e-Gov 法令検索](https://laws.e-gov.go.jp/)の頁の中で法令名を引き（語は必須の変数 `query`）、件数と法令名を報告する。
 
 ```json
@@ -152,17 +152,17 @@ import { z } from "zod";
 （`params` は後の「クロールごとの値」の節。）
 
 いまの `catalog.json` の形は `profile` が `capture-scripts/5` で、`/4` までの台帳は断る
-（札や `default` や `params` を黙って捨てることはない）。
+（対象サイトや `default` や `params` を黙って捨てることはない）。
 
-**札を使うのは台帳。** capture-ledger は札のあるスクリプトを、クロールの起点のどれかがそのサイトに
+**対象サイトを使うのは台帳。** capture-ledger は対象サイトのあるスクリプトを、クロールの起点のどれかがそのサイトに
 あるときだけ入れる —— `scripts` を省いたクロールでは起点に合う物を自分で選び、起点に合わない
-物を名指せば 400 で断る。dashboard は札を見せ、新しいクロールの画面で同じ決まりのとおりに選ぶ。
+物を名指せば 400 で断る。dashboard は対象サイトを見せ、新しいクロールの画面で同じ決まりのとおりに選ぶ。
 
 - **書けるのは小文字のホスト名だけ。** IDN は punycode で書く。ポート・scheme・`*` は書けない。
   照らすのは起点の `new URL(…).hostname` との完全一致で、`example.com` と `www.example.com` は別
   （両方要るなら両方書く）
 - **見分けの行も書く。** 決まりはクロールの単位で、リンクを辿って別のホストへ出た頁でも、スクリプトは走る。
-  冒頭で `location.hostname` と比べ、違えば何もしないで終わる。`pnpm run check` は、札のホスト名が
+  冒頭で `location.hostname` と比べ、違えば何もしないで終わる。`pnpm run check` は、対象サイトのホスト名が
   source に `"…"` で出てこなければ止める（見分けの行の書き忘れ）
 
 ```ts
@@ -316,7 +316,7 @@ pnpm run scripts list
 
 1. `scripts/<id>.ts` を書く（上の作法 3 つ）
 2. `catalog.json` に `id` / `phase` / `file` / `summary` を足す（サイト用なら `sites`、既定に入れないなら `"default": false`、クロールごとの値を読むなら `params` も。変数はソースの宣言の写し）
-3. `pnpm run check`（tsc → `catalog.json` との一致と札・`params` の形 → sha256 の印字）
+3. `pnpm run check`（tsc → `catalog.json` との一致と対象サイト・`params` の形 → sha256 の印字）
 4. 台帳へ入れ直す
 
 ## この検査が言えないこと

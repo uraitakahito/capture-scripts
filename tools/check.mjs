@@ -6,8 +6,8 @@
  *
  * 1. **catalog.json と実体が一致するか** —— 列挙された `file` が在る / `scripts/` の
  *    `.ts` が全部列挙されている / `id` が重複しない / `phase` が 2 値のどちらか。
- * 2. **サイト用の札 (`sites`) の形** —— 書くなら小文字のホスト名を 1 本以上・重複なし
- *    (台帳の CHECK と同じ式)。札のホスト名が source に `"…"` で出てこなければ止める ——
+ * 2. **対象サイト (`sites`) の形** —— 書くなら小文字のホスト名を 1 本以上・重複なし
+ *    (台帳の CHECK と同じ式)。対象サイトのホスト名が source に `"…"` で出てこなければ止める ——
  *    サイト用のスクリプトも、選ばれればどの頁でも走る。冒頭で `location.hostname` と比べる行の
  *    書き忘れを、ここで拾う。
  * 3. **クロールごとの値の宣言 (`params`) の形と、source との一致** —— name の綴り・kind・required・
@@ -47,7 +47,7 @@ import { readParams } from "./read-params.ts";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const PHASES = new Set(["preload", "behavior"]);
-/** 札の形。小文字の ASCII のホスト名 (IDN は punycode)。台帳の CHECK (capture-ledger の 021) と同じ式 */
+/** 対象サイトの形。小文字の ASCII のホスト名 (IDN は punycode)。台帳の CHECK (capture-ledger の 021) と同じ式 */
 const HOSTNAME = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/;
 /** 値の名前の形。台帳の schema と BrowserHive の契約 (ValueName) と同じ式。長さは 64 字まで */
 const PARAM_NAME = /^[a-z][a-z0-9_]*$/;
@@ -159,7 +159,7 @@ for (const script of catalog.scripts) {
   if (script.default !== undefined && typeof script.default !== "boolean") {
     fail(`${where}: default は true か false（省けば既定に入る）`);
   }
-  // 札は省ける (どこでも走るスクリプト)。書くなら、小文字のホスト名を 1 本以上・重複なしで
+  // 対象サイトは省ける (どこでも走るスクリプト)。書くなら、小文字のホスト名を 1 本以上・重複なしで
   const sites = script.sites ?? [];
   if (script.sites !== undefined) {
     if (!Array.isArray(script.sites) || script.sites.length === 0) {
@@ -263,7 +263,7 @@ for (const script of catalog.scripts) {
 
   for (const problem of importProblems(source, script.phase)) fail(`${where}: ${script.file} の ${problem}`);
 
-  // 札のホスト名が source に無い = 見分けの行の書き忘れ。サイト用でも、選ばれればどの頁でも走るので
+  // 対象サイトのホスト名が source に無い = 見分けの行の書き忘れ。サイト用でも、選ばれればどの頁でも走るので
   for (const site of Array.isArray(sites) ? sites : []) {
     if (typeof site === "string" && !source.includes(`"${site}"`)) {
       fail(`${where}: "${site}" が ${script.file} に無い —— 冒頭で location.hostname と比べること`);
