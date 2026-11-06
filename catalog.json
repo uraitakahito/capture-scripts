@@ -1,5 +1,5 @@
 {
-  "profile": "capture-scripts/4",
+  "profile": "capture-scripts/5",
   "scripts": [
     {
       "id": "autoscroll",
@@ -13,9 +13,15 @@
       "file": "scripts/egov-law-search.ts",
       "sites": ["laws.e-gov.go.jp"],
       "params": [
-        { "name": "query", "kind": "variable", "required": false, "summary": "法令名の検索語。省けばソースの既定" }
+        {
+          "name": "query",
+          "kind": "variable",
+          "required": true,
+          "summary": "法令名の検索語",
+          "schema": { "type": "string", "minLength": 1 }
+        }
       ],
-      "summary": "e-Gov 法令検索で法令名を引き（語は変数 query。既定はセキュリティ）、件数と法令名を報告する"
+      "summary": "e-Gov 法令検索で法令名を引き（語は変数 query）、件数と法令名を報告する"
     },
     {
       "id": "autofetch",

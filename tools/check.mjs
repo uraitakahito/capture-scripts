@@ -11,12 +11,15 @@
  *    サイト用のスクリプトも、選ばれればどの頁でも走る。冒頭で `location.hostname` と比べる行の
  *    書き忘れを、ここで拾う。
  * 3. **クロールごとの値の宣言 (`params`) の形と、source との一致** —— name の綴り・kind・required・
- *    summary・重複・知らない鍵 (既定値はソースの中にしか置かない)。宣言した名前は source が
- *    `__bh.vars.<名前>` / `__bh.secrets.<名前>` で読んでいること、逆に読んでいる名前は宣言に在ること
+ *    summary・schema・重複・知らない鍵 (既定値はソースの中にしか置かない)。変数の正は source の
+ *    `defineParams(z.object({ … }))` で、`catalog.json` の `params` (kind: variable) はその写し
+ *    (`tools/read-params.ts` が走らせずに読み、1 つでも違えば止める)。シークレットは `params` が正で、
+ *    宣言した名前を source が `__bh.secrets.<名前>` で読んでいること、逆に読んでいる名前は宣言に在ること
  *    (コメントは除いて見る。`["名前"]` の形は見ない)。書き忘れと綴り違いを、台帳に入れる前に止める。
  * 4. **`import` の形** —— 受けるのは `import { z } from "zod"` と `import * as z from "zod/mini"` の 2 つで、
- *    先頭の文に 1 つだけ。`phase: preload` のスクリプトには書けない。tsc はどの形でも通すので、ここで
- *    見ないと tag の後にクロールの段で初めて落ちる (ts-compile-service の `BH0003`・`BH0004` と同じ決まり)。
+ *    先頭の文に 1 つだけ。`phase: preload` のスクリプトには `import` も `defineParams` も書けない。tsc は
+ *    どの形でも通すので、ここで見ないと tag の後にクロールの段で初めて落ちる (ts-compile-service の
+ *    `BH0003`・`BH0004` と同じ決まり)。
  * 5. **sha256 を印字する** —— 台帳 (`pnpm run scripts list`) に並ぶ digest と、
  *    目で突き合わせられるように。台帳が打つのは、書いたままの TS のバイト列に対する値。
  *
@@ -35,9 +38,12 @@
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import { fileURLToPath } from "node:url";
 
 import ts from "typescript";
+
+import { readParams } from "./read-params.ts";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const PHASES = new Set(["preload", "behavior"]);
@@ -46,13 +52,12 @@ const HOSTNAME = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?
 /** 値の名前の形。台帳の schema と BrowserHive の契約 (ValueName) と同じ式。長さは 64 字まで */
 const PARAM_NAME = /^[a-z][a-z0-9_]*$/;
 const PARAM_NAME_MAX = 64;
-/** 宣言の種類と、受け皿のどのメンバで読むか */
-const PARAM_KINDS = { variable: "vars", secret: "secrets" };
-const PARAM_KEYS = new Set(["name", "kind", "required", "summary"]);
+const PARAM_KINDS = new Set(["variable", "secret"]);
+const PARAM_KEYS = new Set(["name", "kind", "required", "summary", "schema"]);
 
 /**
  * コメントを除いた source。宣言と読む所の突き合わせに使う —— doc comment に書いた
- * `__bh.vars.query` を「読んでいる」と数えないため。tsc の scanner で token だけを拾う
+ * `__bh.secrets.api_token` を「読んでいる」と数えないため。tsc の scanner で token だけを拾う
  * (正規表現で `//` を消すと、文字列の中の URL まで消える)。token の間は空白 1 つ。
  */
 const withoutComments = (code) => {
@@ -64,11 +69,11 @@ const withoutComments = (code) => {
   return tokens.join(" ");
 };
 
-/** source が `__bh.vars.<名前>` / `__bh.secrets.<名前>` で読んでいる名前。token の間の空白を許す */
-const readNames = (code) => {
-  const names = { vars: new Set(), secrets: new Set() };
-  for (const m of withoutComments(code).matchAll(/__bh\s*\.\s*(vars|secrets)\s*\.\s*([A-Za-z_$][\w$]*)/g)) {
-    names[m[1]].add(m[2]);
+/** source が `__bh.secrets.<名前>` で読んでいる名前。token の間の空白を許す */
+const readSecrets = (code) => {
+  const names = new Set();
+  for (const m of withoutComments(code).matchAll(/__bh\s*\.\s*secrets\s*\.\s*([A-Za-z_$][\w$]*)/g)) {
+    names.add(m[1]);
   }
   return names;
 };
@@ -104,13 +109,13 @@ const problems = [];
 const fail = (message) => problems.push(message);
 
 /**
- * @typedef {{ name: string, kind: "variable" | "secret", required?: boolean, summary: string }} Param
- *   クロールごとの値の宣言。既定値は書けない (ソースの中にだけ置く)
+ * @typedef {{ name: string, kind: "variable" | "secret", required?: boolean, summary: string, schema?: object }} Param
+ *   クロールごとの値の宣言。既定値は書けない (ソースの中にだけ置く)。schema は kind: variable の写しだけ
  * @type {{ profile: string, scripts: { id: string, phase: string, file: string, summary: string, sites?: string[], default?: boolean, params?: Param[] }[] }}
  */
 const catalog = JSON.parse(readFileSync(join(root, "catalog.json"), "utf8"));
 
-if (catalog.profile !== "capture-scripts/4") {
+if (catalog.profile !== "capture-scripts/5") {
   fail(`catalog.json の profile が知らない綴り: ${String(catalog.profile)}`);
 }
 
@@ -171,8 +176,8 @@ for (const script of catalog.scripts) {
 
   // クロールごとの値の宣言。省けば値を読まないスクリプト。書くなら列で、1 つずつ形を見る。
   // 既定値は書けない —— 知らない鍵 (default・value …) はここで止める (README「既定値はソースの中にしか置かない」)
-  /** @type {Record<"vars" | "secrets", Set<string>>} */
-  const declared = { vars: new Set(), secrets: new Set() };
+  const declaredVariables = [];
+  const declaredSecrets = new Set();
   if (script.params !== undefined) {
     if (!Array.isArray(script.params)) {
       fail(`${where}: params は宣言の列 (省けばクロールごとの値を読まないスクリプト)`);
@@ -187,8 +192,11 @@ for (const script of catalog.scripts) {
         if (typeof param.name !== "string" || !PARAM_NAME.test(param.name) || param.name.length > PARAM_NAME_MAX) {
           fail(`${label}: name は英小文字で始め、英小文字・数字・_ で ${String(PARAM_NAME_MAX)} 字まで`);
         }
-        if (!(param.kind in PARAM_KINDS)) {
+        if (!PARAM_KINDS.has(param.kind)) {
           fail(`${label}: kind は variable か secret (いまは ${String(param.kind)})`);
+        }
+        if (param.kind === "secret" && param.schema !== undefined) {
+          fail(`${label}: schema を書けるのは kind: variable だけ`);
         }
         if (param.required !== undefined && typeof param.required !== "boolean") {
           fail(`${label}: required は true か false (省けば false)`);
@@ -201,7 +209,8 @@ for (const script of catalog.scripts) {
         }
         if (names.has(param.name)) fail(`${label}: 同じ名前が 2 度ある`);
         names.add(param.name);
-        if (typeof param.name === "string" && param.kind in PARAM_KINDS) declared[PARAM_KINDS[param.kind]].add(param.name);
+        if (param.kind === "variable") declaredVariables.push(param);
+        if (param.kind === "secret" && typeof param.name === "string") declaredSecrets.add(param.name);
       }
     }
   }
@@ -214,20 +223,42 @@ for (const script of catalog.scripts) {
     continue;
   }
 
-  // 宣言と source の一致。宣言した名前を読んでいない = 書き忘れ、読んでいるのに宣言が無い = 綴り違いか宣言の忘れ。
-  // どちらも台帳に入った後では、頁の中で undefined を読むだけで誰も気づかない
-  const reads = readNames(source);
-  for (const member of /** @type {const} */ (["vars", "secrets"])) {
-    for (const name of declared[member]) {
-      if (!reads[member].has(name)) {
-        fail(`${where}: params の ${name} を ${script.file} が __bh.${member}.${name} で読んでいない`);
-      }
+  // シークレットの宣言と source の一致。宣言した名前を読んでいない = 書き忘れ、読んでいるのに宣言が無い = 綴り違いか
+  // 宣言の忘れ。どちらも台帳に入った後では、頁の中で undefined を読むだけで誰も気づかない
+  const secretReads = readSecrets(source);
+  for (const name of declaredSecrets) {
+    if (!secretReads.has(name)) {
+      fail(`${where}: params の ${name} を ${script.file} が __bh.secrets.${name} で読んでいない`);
     }
-    for (const name of reads[member]) {
-      if (!declared[member].has(name)) {
-        fail(`${where}: ${script.file} が __bh.${member}.${name} を読むが、params に宣言が無い`);
-      }
+  }
+  for (const name of secretReads) {
+    if (!declaredSecrets.has(name)) {
+      fail(`${where}: ${script.file} が __bh.secrets.${name} を読むが、params に宣言が無い`);
     }
+  }
+
+  // 変数の正は source の宣言で、catalog.json はその写し。読めない形と、写しのずれを止める。答えの形をそのまま
+  // 見せるので、catalog.json に貼れば直る
+  const read = readParams(source);
+  for (const problem of read.problems) {
+    fail(`${where}: ${script.file}:${String(problem.line)}:${String(problem.col)} ${problem.message}`);
+  }
+  if (read.problems.length === 0) {
+    const copy = declaredVariables.map((param) => ({ ...param, required: param.required === true }));
+    if (!isDeepStrictEqual(copy, read.params)) {
+      fail(
+        `${where}: params の変数が ${script.file} の defineParams の宣言と食い違う。` +
+          `source の宣言は ${JSON.stringify(read.params)}`,
+      );
+    }
+  }
+  for (const param of read.params) {
+    if (param.summary === undefined || param.summary === "") {
+      fail(`${where}: ${script.file} の ${param.name} に .describe("…") が無い —— 値を入れる欄に何を書くか分からなくなる`);
+    }
+  }
+  if (script.phase === "preload" && read.declares) {
+    fail(`${where}: ${script.file} は preload では defineParams を使えない (受け皿が無い)`);
   }
 
   for (const problem of importProblems(source, script.phase)) fail(`${where}: ${script.file} の ${problem}`);
@@ -243,8 +274,8 @@ for (const script of catalog.scripts) {
     id: script.id,
     phase: script.phase,
     sites: Array.isArray(sites) ? sites : [],
-    vars: [...declared.vars],
-    secrets: [...declared.secrets],
+    vars: read.params.map((param) => param.name),
+    secrets: [...declaredSecrets],
     bytes: Buffer.byteLength(source, "utf8"),
     sha256: createHash("sha256").update(source, "utf8").digest("hex"),
   });
@@ -258,6 +289,13 @@ for (const row of rows) {
       (row.secrets.length === 0 ? "" : `  secrets:${row.secrets.join(",")}`) +
       "\n",
   );
+}
+
+// 見本は配らないが、書き方の手本なので、宣言は読める形であること
+for (const name of readdirSync(join(root, "examples")).filter((file) => file.endsWith(".ts"))) {
+  for (const problem of readParams(readFileSync(join(root, "examples", name), "utf8")).problems) {
+    fail(`examples/${name}:${String(problem.line)}:${String(problem.col)} ${problem.message}`);
+  }
 }
 
 if (problems.length > 0) {
