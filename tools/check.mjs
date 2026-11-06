@@ -14,7 +14,10 @@
  *    summary・重複・知らない鍵 (既定値はソースの中にしか置かない)。宣言した名前は source が
  *    `__bh.vars.<名前>` / `__bh.secrets.<名前>` で読んでいること、逆に読んでいる名前は宣言に在ること
  *    (コメントは除いて見る。`["名前"]` の形は見ない)。書き忘れと綴り違いを、台帳に入れる前に止める。
- * 4. **sha256 を印字する** —— 台帳 (`pnpm run scripts list`) に並ぶ digest と、
+ * 4. **`import` の形** —— 受けるのは `import { z } from "zod"` と `import * as z from "zod/mini"` の 2 つで、
+ *    先頭の文に 1 つだけ。`phase: preload` のスクリプトには書けない。tsc はどの形でも通すので、ここで
+ *    見ないと tag の後にクロールの段で初めて落ちる (ts-compile-service の `BH0003`・`BH0004` と同じ決まり)。
+ * 5. **sha256 を印字する** —— 台帳 (`pnpm run scripts list`) に並ぶ digest と、
  *    目で突き合わせられるように。台帳が打つのは、書いたままの TS のバイト列に対する値。
  *
  * ## 何を見ないか
@@ -68,6 +71,33 @@ const readNames = (code) => {
     names[m[1]].add(m[2]);
   }
   return names;
+};
+
+/** ts-compile-service が束ねられる形か。別名・既定の import・`import type`・ほかの package は通さない */
+const isAllowedImport = (statement) => {
+  if (!ts.isImportDeclaration(statement) || statement.attributes !== undefined) return false;
+  const clause = statement.importClause;
+  if (clause === undefined || clause.isTypeOnly || clause.name !== undefined) return false;
+  const bindings = clause.namedBindings;
+  const from = statement.moduleSpecifier.text;
+  if (bindings === undefined) return false;
+  if (ts.isNamespaceImport(bindings)) return from === "zod/mini" && bindings.name.text === "z";
+  const [only, ...rest] = bindings.elements;
+  return from === "zod" && rest.length === 0 && only !== undefined && !only.isTypeOnly && only.propertyName === undefined && only.name.text === "z";
+};
+
+/** source の `import` の文の問題。答えは文の列 (preload か、形が違うか、先頭の文でないか) */
+const importProblems = (code, phase) => {
+  const source = ts.createSourceFile("script.ts", code, ts.ScriptTarget.Latest);
+  const found = [];
+  source.statements.forEach((statement, index) => {
+    if (!ts.isImportDeclaration(statement) && !ts.isImportEqualsDeclaration(statement)) return;
+    const text = statement.getText(source).replace(/\s+/g, " ");
+    if (phase === "preload") found.push(`preload では import を書けない (${text})`);
+    else if (!isAllowedImport(statement)) found.push(`受けない import の形 (${text})。"zod" か "zod/mini" の 2 形だけ (README の「Zod」)`);
+    else if (index !== 0) found.push(`import は先頭の文に 1 つだけ (${text})`);
+  });
+  return found;
 };
 
 const problems = [];
@@ -199,6 +229,8 @@ for (const script of catalog.scripts) {
       }
     }
   }
+
+  for (const problem of importProblems(source, script.phase)) fail(`${where}: ${script.file} の ${problem}`);
 
   // 札のホスト名が source に無い = 見分けの行の書き忘れ。サイト用でも、選ばれればどの頁でも走るので
   for (const site of Array.isArray(sites) ? sites : []) {
