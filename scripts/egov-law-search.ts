@@ -2,7 +2,7 @@ import { z } from "zod";
 
 /**
  * e-Gov 法令検索 (`laws.e-gov.go.jp`) で法令名を検索し、答えの件数と法令名を報告する。
- * サイト用のスクリプトの見本で、札は `laws.e-gov.go.jp` (`catalog.json`)。
+ * サイト用のスクリプトの見本で、対象サイトは `laws.e-gov.go.jp` (`catalog.json`)。
  *
  * 頁は Vue の SPA で、読み込みの直後には検索窓がまだ無い —— 描かれるまで待つ。「検索」のボタンは
  * `type="button"` で、押しても文書は替わらない (答えは `/internal-api/SelectLaw.json` から引き、
