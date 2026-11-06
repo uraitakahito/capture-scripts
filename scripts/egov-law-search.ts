@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 /**
  * e-Gov 法令検索 (`laws.e-gov.go.jp`) で法令名を検索し、答えの件数と法令名を報告する。
  * サイト用のスクリプトの見本で、札は `laws.e-gov.go.jp` (`catalog.json`)。
@@ -7,16 +9,19 @@
  * 頁の中で `/result` に切り替わる)。取り込む文書は起点の頁のまま —— JS で頁を移ると、去った
  * 文書は本文の無い応答として archive に残る。
  *
- * 検索語は変数 `__bh.vars.query` が先 (`catalog.json` の `params` で宣言。クロールを始める頼みで渡す)。
- * 無ければ版の設定 `__bh.opts["egov-law-search"].query`、それも無ければ "セキュリティ"。
- * waitMs (待つ上限。既定 10000) は版の設定のまま
+ * 検索語は必須の変数 `query` (クロールを始める頼みで渡す)。渡さないクロールは ts-compile-service が止める。
+ * waitMs (待つ上限。既定 10000) は版の設定
  */
 (async () => {
   // 決まりはクロールの単位なので、リンクを辿って別のホストへ出た頁でも走る
   if (location.hostname !== "laws.e-gov.go.jp") return;
+  const { query } = defineParams(
+    z.object({
+      query: z.string().min(1).describe("法令名の検索語"),
+    }),
+  );
   const id = "egov-law-search";
   const opts = globalThis.__bh.opts[id] ?? {};
-  const query = String(globalThis.__bh.vars.query ?? opts.query ?? "セキュリティ");
   const waitMs = Number(opts.waitMs ?? 10000);
   const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
