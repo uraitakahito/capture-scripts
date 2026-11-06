@@ -11,6 +11,9 @@ importers:
       typescript:
         specifier: 6.0.3
         version: 6.0.3
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
 
 packages:
 
@@ -19,6 +22,11 @@ packages:
     engines: {node: '>=14.17'}
     hasBin: true
 
+  zod@4.6.7:
+    resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
+
 snapshots:
 
   typescript@6.0.3: {}
+
+  zod@4.6.7: {}

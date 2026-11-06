@@ -23,11 +23,13 @@ capture-scripts  ──→  capture-ledger（台帳）  ──→  Windmill の 
 | `types/host.d.ts` | 受け皿 `__bh` の型。[ts-compile-service](https://github.com/uraitakahito/ts-compile-service) にも写される（下の「2 つの門番」） |
 | `catalog.json` | ソースが自分では言えないこと —— `id` と `phase`、一言の `summary`、サイト用なら `sites`、既定に入れないなら `default`、クロールごとの値を読むなら `params` |
 | `tsconfig.json` | strict と `erasableSyntaxOnly`。enum のような「剥がして消えない構文」を書かせない |
-| `tools/check.mjs` | `pnpm run check` の後半。`catalog.json` と一致するか・札（`sites`）と `default` の形・`params` の形と source との一致・sha256 はいくつか（前半は tsc） |
+| `tools/check.mjs` | `pnpm run check` の後半。`catalog.json` と一致するか・札（`sites`）と `default` の形・`params` の形と source との一致・`import` の形・sha256 はいくつか（前半は tsc） |
+| `examples/*.ts` | 書き方の見本。配らないので `catalog.json` には載せず、tsc だけが読む |
 
 runtime の依存は無い。台帳が読むのは書いたままの TS のバイト列そのもので、それに `sha256` を打つ。
 JS への変換は Windmill の flow の中で ts-compile-service がクロールの段ごとに行い、BrowserHive は
-その JS を `sha256` で照合する —— 2 つの hash が、変換した場所で継がれる。dev の依存は typescript だけ。
+その JS を `sha256` で照合する —— 2 つの hash が、変換した場所で継がれる。dev の依存は typescript と zod
+（zod は型のため。ページの JS に入れるのは ts-compile-service。下の「Zod」）。
 
 ## 2 つの門番 —— 型が通らない TS は走らない
 
@@ -231,6 +233,28 @@ BrowserHive の本文の取り方を直した後で考え直す。
 読む名前が宣言に在ることを見る（コメントは除く。`["名前"]` の形は見ない）。書き忘れと綴り違いを、台帳に入れる前に止める。
 
 この repo にシークレットを読む見本は無い（秘密を要するサイトのスクリプトが無い）。
+
+## Zod —— 読んだ値の形を確かめる
+
+`behavior` のスクリプトは [Zod](https://zod.dev/) を読める。先頭の文に、次のどちらかを書く。
+
+```ts
+import { z } from "zod";        // 使う名前（z.object など）だけが JS に入る。目安 85 KB
+import * as z from "zod/mini";  // 関数で組む小さい版。目安 15 KB
+```
+
+JS に束ねるのは ts-compile-service で、型は dev の依存の `zod` から付く。`import` の無いスクリプトの JS は変わらない。
+見本は `examples/zod-in-page.ts`。
+
+- **受けるのはこの 2 形だけ。** 別名（`import { z as zod }`）・既定の import・`import type` は ts-compile-service が
+  `BH0003` で断り、ほかの package は `TS2307` になる。`pnpm run check` も同じ形を見る
+- **説明のコメントは `import` の後に書く。** `import` の前のコメントは JS に残らない（`// @ts-nocheck` は前に在ってよい）
+- **`parse` より `safeParse`。** `parse` の例外は「1 本の書き損じで他を落とさない」決まりで行 1 つになり、minify された束では
+  `l: ZodError` としか残らない。`safeParse` と `__bh.log.error` なら、どの項目が違ったかが残る。形が合わなくてもクロールは成功のまま
+- **`preload` では使えない。** 全部のフレームで遷移のたびに走り、受け皿が無いので失敗を書く先が無い。`pnpm run check` と
+  ts-compile-service（`BH0004`）が断る
+- **厳しい CSP のページでも動く。** Zod は速い検査を `new Function` で作ろうとし、`script-src` が eval を禁じるページでは
+  投げるうえ、相手のサイトへ違反の報告が飛ぶ。ts-compile-service は `jitless` で束ねるので、どちらも起きない
 
 ## 使う
 
