@@ -19,22 +19,28 @@ capture-scripts  ──→  capture-ledger（台帳）  ──→  Windmill の 
 
 | | |
 |---|---|
-| `scripts/*.ts` | ページの中で走らせるスクリプト。書いたままのバイト列が台帳に入る |
+| `scripts/*.ts` | ページの中で走らせるスクリプトを書く所。サイト用でなければ、書いたままのバイト列が台帳に入る |
+| `generated/*.ts` | サイト用のスクリプトに `sites` を書き込んだ TS。`pnpm run build` が作り、commit する。台帳に入るのはこちら |
 | `types/host.d.ts` | 受け皿 `__bh` の型。[ts-compile-service](https://github.com/uraitakahito/ts-compile-service) にも写される（下の「2 つの門番」） |
-| `catalog.json` | ソースが自分では言えないこと —— `id` と `phase`、一言の `summary`、サイト用なら `sites`、既定に入れないなら `default`、シークレットを読むなら `params`（変数の `params` はソースの宣言の写し） |
+| `types/authoring.d.ts` | `onSite()` と `catalogSites()` の宣言。書く所（`scripts/`）でだけ見える。ts-compile-service へは写さない |
+| `catalog.json` | ソースが自分では言えないこと —— `id` と `phase`、台帳が読む `file`、一言の `summary`、サイト用なら `sites`、既定に入れないなら `default`、シークレットを読むなら `params`（変数の `params` はソースの宣言の写し） |
 | `tsconfig.json` | strict と `erasableSyntaxOnly`。enum のような「剥がして消えない構文」を書かせない |
-| `tools/check.mjs` | `pnpm run check` の後半。`catalog.json` と一致するか・対象サイト（`sites`）と `default` の形・`params` の形と source との一致・`import` の形・sha256 はいくつか（前半は tsc） |
+| `tsconfig.generated.json` | `generated/` を `types/authoring.d.ts` なしで見る。書き込み損ねた `onSite()` はここで `TS2304` になる |
+| `tools/check.mjs` | `pnpm run check` の最後。`catalog.json` と一致するか・対象サイト（`sites`）と `default` の形・見分けの形と `generated/` の古さ・`params` の形と source との一致・`import` の形・sha256 はいくつか（前は tsc と試験） |
 | `tools/read-params.ts` | `defineParams` の宣言を走らせずに読む係。[ts-compile-service](https://github.com/uraitakahito/ts-compile-service) にも 1 バイトも変えずに写される |
+| `tools/build.mjs`・`tools/write-sites.ts` | `pnpm run build`。`sites` を TS に書き込み、`generated/` を作る |
+| `test/*.test.mjs` | 書き込みと見分けの判定の試験 |
 | `examples/*.ts` | 書き方の見本。配らないので `catalog.json` には載せず、tsc だけが読む |
 
-runtime の依存は無い。台帳が読むのは書いたままの TS のバイト列そのもので、それに `sha256` を打つ。
+runtime の依存は無い。台帳が読むのは `catalog.json` の `file` が指す TS のバイト列そのもので、それに `sha256` を打つ。
 JS への変換は Windmill の flow の中で ts-compile-service がクロールの段ごとに行い、BrowserHive は
 その JS を `sha256` で照合する —— 2 つの hash が、変換した場所で継がれる。dev の依存は typescript と zod
 （zod は型のため。ページの JS に入れるのは ts-compile-service。下の「Zod」）。
 
 ## 2 つの門番 —— 型が通らない TS は走らない
 
-1. **この repo の CI** (`tsc --noEmit`)。型が通らなければ tag にならず、台帳にも入らない
+1. **この repo の CI** (`tsc --noEmit`)。型が通らなければ tag にならず、台帳にも入らない。`scripts/` と `generated/` は
+   別の program で見る。`generated/` の program には `onSite()` の宣言を見せないので、書き込み損ねた行もここで止まる
 2. **ts-compile-service**。クロールの段ごとに同じ tsconfig で型検査し、通らなければ 422 を返して段ごと落とす
    （台帳には CLI でも足せるので、tag を経ない道にも門番が要る）
 
@@ -134,7 +140,7 @@ import { z } from "zod";
 {
   "id": "egov-law-search",
   "phase": "behavior",
-  "file": "scripts/egov-law-search.ts",
+  "file": "generated/egov-law-search.ts",
   "sites": ["laws.e-gov.go.jp"],
   "params": [
     {
@@ -162,15 +168,27 @@ import { z } from "zod";
   照らすのは起点の `new URL(…).hostname` との完全一致で、`example.com` と `www.example.com` は別
   （両方要るなら両方書く）
 - **見分けの行も書く。** 決まりはクロールの単位で、リンクを辿って別のホストへ出た頁でも、スクリプトは走る。
-  冒頭で `location.hostname` と比べ、違えば何もしないで終わる。`pnpm run check` は、対象サイトのホスト名が
-  source に `"…"` で出てこなければ止める（見分けの行の書き忘れ）
+  IIFE の最初の文に `if (!onSite()) return;` と書く。ホスト名は書かない
+- **`pnpm run build` を流す。** `sites` を比較の式にして TS に書き込み、`generated/<id>.ts` を作る。`catalog.json` の
+  `file` はこちらを指す。`pnpm run check` は作り直して比べるので、流し忘れも見分けの形の違いも止まる
 
 ```ts
+// scripts/<id>.ts（書く所）
 (async () => {
-  if (location.hostname !== "laws.e-gov.go.jp") return;
+  if (!onSite()) return;
+  // …
+})();
+
+// generated/<id>.ts（pnpm run build が作る）
+(async () => {
+  if (!(location.hostname === "laws.e-gov.go.jp")) return;
   // …
 })();
 ```
+
+`onSite()` と `catalogSites()`（`sites` の値の配列）は書き込まれて消えるので、ページの中にも ts-compile-service にも無い。
+その場の TS や `scripts add` で入れるスクリプトは、`location.hostname` を自分で比べる。比較は `===` を `||` で繋ぐ。
+`Array.prototype.includes` は相手のサイトの JS が差し替えられる。
 
 **撮れないサイトのスクリプトは足さない。** 台帳のクロールは robots.txt を守るので、robots が断る頁
 （たとえば Google の `/search`）では、スクリプトは 1 度も走らない。
@@ -315,9 +333,10 @@ pnpm run scripts list
 ## 足す
 
 1. `scripts/<id>.ts` を書く（上の作法 3 つ）
-2. `catalog.json` に `id` / `phase` / `file` / `summary` を足す（サイト用なら `sites`、既定に入れないなら `"default": false`、クロールごとの値を読むなら `params` も。変数はソースの宣言の写し）
-3. `pnpm run check`（tsc → `catalog.json` との一致と対象サイト・`params` の形 → sha256 の印字）
-4. 台帳へ入れ直す
+2. `catalog.json` に `id` / `phase` / `file` / `summary` を足す（サイト用なら `sites` も足し、`file` は `generated/<id>.ts`。既定に入れないなら `"default": false`、クロールごとの値を読むなら `params` も。変数はソースの宣言の写し）
+3. サイト用なら `pnpm run build`
+4. `pnpm run check`（tsc → 試験 → `catalog.json` との一致と対象サイト・`params` の形 → sha256 の印字）
+5. 台帳へ入れ直す
 
 ## この検査が言えないこと
 
@@ -327,7 +346,7 @@ pnpm run scripts list
 （capture-fixtures の `/responsive-images` に対して、ブラウザが自分では要求しない
 画像の変種が届いたかを数える）。
 
-ここの検査は「型が通らない TS」と「`catalog.json` との食い違い」を止めるためのもの。
+ここの検査は「型が通らない TS」と「`catalog.json` との食い違い」と「見分けの形の違い」を止めるためのもの。
 
 ## リリース
 
