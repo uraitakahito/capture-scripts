@@ -156,7 +156,7 @@ import { z } from "zod";
 
 **対象サイトを使うのは台帳。** capture-ledger は対象サイトのあるスクリプトを、クロールの起点のどれかがそのサイトに
 あるときだけ入れる —— `scripts` を省いたクロールでは起点に合う物を自分で選び、起点に合わない
-物を名指せば 400 で断る。dashboard は対象サイトを見せ、新しいクロールの画面で同じ決まりのとおりに選ぶ。
+物を名指せば 400 で断る。[capture-workbench](https://github.com/uraitakahito/capture-workbench) は対象サイトを見せ、新しいクロールの画面で同じ決まりのとおりに選ぶ。
 
 - **書けるのは小文字のホスト名だけ。** IDN は punycode で書く。ポート・scheme・`*` は書けない。
   照らすのは起点の `new URL(…).hostname` との完全一致で、`example.com` と `www.example.com` は別
@@ -221,7 +221,7 @@ BrowserHive の本文の取り方を直した後で考え直す。
 
 ### 変数 —— `defineParams`
 
-変数は値が記録に残る（WACZ の `settings.variables`・台帳の行・dashboard）。スクリプトの中で宣言して読む。
+変数は値が記録に残る（WACZ の `settings.variables`・台帳の行・workbench）。スクリプトの中で宣言して読む。
 
 ```ts
 import { z } from "zod";
@@ -247,7 +247,7 @@ import { z } from "zod";
 - **`zod/mini` では宣言できない。** `defineParams` は `zod` の型を受ける
 - **`z` を宣言の中でしか読まなければ、Zod は JS に入らない。** `defineParams(…)` は JS で `globalThis.__bh.vars` に置き換わる
 
-**頼みで渡す**（台帳の `POST /api/crawls` の `variables`。dashboard の新しいクロールの画面は、選んだスクリプトの宣言から
+**頼みで渡す**（台帳の `POST /api/crawls` の `variables`。workbench の新しいクロールの画面は、選んだスクリプトの宣言から
 欄を作る）。宣言に無い名前を渡せば、`.min` などに合わない値を渡せば、台帳が 400 で断る。
 
 台帳は `catalog.json` しか読まないので、**スクリプト集の変数は `catalog.json` の `params` に写す**
