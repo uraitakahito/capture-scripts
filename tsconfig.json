@@ -9,5 +9,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["scripts/*.ts", "examples/*.ts", "types/host.d.ts"]
+  "include": ["scripts/*.ts", "examples/*.ts", "types/host.d.ts", "types/authoring.d.ts"]
 }
