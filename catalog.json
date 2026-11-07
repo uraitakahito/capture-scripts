@@ -10,7 +10,7 @@
     {
       "id": "egov-law-search",
       "phase": "behavior",
-      "file": "scripts/egov-law-search.ts",
+      "file": "generated/egov-law-search.ts",
       "sites": ["laws.e-gov.go.jp"],
       "params": [
         {

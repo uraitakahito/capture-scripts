@@ -1,11 +1,12 @@
 name: ci
 
-# runtime の依存は無い (台帳は書いたままの TS のバイト列を持ち、ts-compile-service が JS にする。
+# runtime の依存は無い (台帳は catalog.json の file が指す TS のバイト列を持ち、ts-compile-service が JS にする。
 # ページの中で評価されるのはその JS)。dev の依存は typescript と zod で、tsc が型の門番の 1 か所目
 # —— **型が通らない TS は tag にならない**。2 か所目は ts-compile-service (クロールの段ごとに同じ型検査)。
 #
-# 見ているのは 2 つ: tsc (型と構文) と tools/check.mjs (catalog.json と実体の一致 / sha256 の
-# 印字)。**振る舞いはここでは見ない** —— jsdom はレイアウトを持たないので autoscroll は
+# 見ているのは 3 つ: tsc (型と構文)、test/ (sites の書き込みと見分けの判定)、tools/check.mjs
+# (catalog.json と実体の一致 / generated/ の古さ / sha256 の印字)。
+# **ページの中の振る舞いはここでは見ない** —— jsdom はレイアウトを持たないので autoscroll は
 # 1 段も進まない。証拠は capture-scheduler の e2e (本物のブラウザ) に置いてある。
 
 on:

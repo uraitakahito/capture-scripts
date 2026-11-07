@@ -1,15 +1,16 @@
 #!/usr/bin/env node
 /**
- * この repo が言えることだけを言う検査 (`pnpm run check` の後半。前半は tsc)。
+ * この repo が言えることだけを言う検査 (`pnpm run check` の最後。前は tsc と試験)。
  *
  * ## 何を見るか
  *
  * 1. **catalog.json と実体が一致するか** —— 列挙された `file` が在る / `scripts/` の
- *    `.ts` が全部列挙されている / `id` が重複しない / `phase` が 2 値のどちらか。
+ *    `.ts` が全部列挙されている (サイト用の物は `generated/` の同じ名前で) / `id` が重複しない /
+ *    `phase` が 2 値のどちらか。
  * 2. **対象サイト (`sites`) の形** —— 書くなら小文字のホスト名を 1 本以上・重複なし
- *    (台帳の CHECK と同じ式)。対象サイトのホスト名が source に `"…"` で出てこなければ止める ——
- *    サイト用のスクリプトも、選ばれればどの頁でも走る。冒頭で `location.hostname` と比べる行の
- *    書き忘れを、ここで拾う。
+ *    (台帳の CHECK と同じ式)。サイト用のスクリプトも、選ばれればどの頁でも走るので、`scripts/` が
+ *    IIFE 1 つで、その最初の文が `if (!onSite()) return;` であることを構文木で見る。`generated/` は
+ *    作り直して比べ、古い物と作る物の無い物を止める。`sites` の無いスクリプトが `onSite()` を読むのも止める。
  * 3. **クロールごとの値の宣言 (`params`) の形と、source との一致** —— name の綴り・kind・required・
  *    summary・schema・重複・知らない鍵 (既定値はソースの中にしか置かない)。変数の正は source の
  *    `defineParams(z.object({ … }))` で、`catalog.json` の `params` (kind: variable) はその写し
@@ -21,7 +22,7 @@
  *    どの形でも通すので、ここで見ないと tag の後にクロールの段で初めて落ちる (ts-compile-service の
  *    `BH0003`・`BH0004` と同じ決まり)。
  * 5. **sha256 を印字する** —— 台帳 (`pnpm run scripts list`) に並ぶ digest と、
- *    目で突き合わせられるように。台帳が打つのは、書いたままの TS のバイト列に対する値。
+ *    目で突き合わせられるように。台帳が打つのは、`file` が指す TS のバイト列に対する値。
  *
  * ## 何を見ないか
  *
@@ -36,14 +37,15 @@
  * ここの検査は「catalog の食い違い」を止めるためのもの。
  */
 import { createHash } from "node:crypto";
-import { readdirSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { fileURLToPath } from "node:url";
 
 import ts from "typescript";
 
 import { readParams } from "./read-params.ts";
+import { hasSiteGuard, readsSites, writeSites } from "./write-sites.ts";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const PHASES = new Set(["preload", "behavior"]);
@@ -124,9 +126,9 @@ if (catalog.profile !== "capture-scripts/5") {
 const onDisk = readdirSync(join(root, "scripts"))
   .filter((name) => name.endsWith(".ts"))
   .sort();
-const listed = new Set(catalog.scripts.map((script) => script.file));
+const listed = new Set(catalog.scripts.map((script) => basename(String(script.file))));
 for (const name of onDisk) {
-  if (!listed.has(`scripts/${name}`)) {
+  if (!listed.has(name)) {
     fail(`scripts/${name} が catalog.json に載っていない —— 載せないと配られない`);
   }
 }
@@ -153,7 +155,7 @@ for (const script of catalog.scripts) {
     fail(`${where}: summary が空 —— 一覧で何をするものか分からなくなる`);
   }
   if (typeof script.file !== "string" || !script.file.endsWith(".ts")) {
-    fail(`${where}: file は scripts/ の .ts を指すこと (いまは ${String(script.file)})`);
+    fail(`${where}: file は .ts を指すこと (いまは ${String(script.file)})`);
   }
   // 既定に入るか（台帳の enabled に写る）。省けば入る。真偽値のほかは書けない
   if (script.default !== undefined && typeof script.default !== "boolean") {
@@ -263,11 +265,19 @@ for (const script of catalog.scripts) {
 
   for (const problem of importProblems(source, script.phase)) fail(`${where}: ${script.file} の ${problem}`);
 
-  // 対象サイトのホスト名が source に無い = 見分けの行の書き忘れ。サイト用でも、選ばれればどの頁でも走るので
-  for (const site of Array.isArray(sites) ? sites : []) {
-    if (typeof site === "string" && !source.includes(`"${site}"`)) {
-      fail(`${where}: "${site}" が ${script.file} に無い —— 冒頭で location.hostname と比べること`);
+  // 見分けの行は書く所 (scripts/) で見る。generated/ は作り直して比べる
+  const wanted = Array.isArray(sites) ? sites : [];
+  const name = basename(String(script.file));
+  if (wanted.length > 0) {
+    const written = readFileSync(join(root, "scripts", name), "utf8");
+    if (!hasSiteGuard(written)) {
+      fail(`${where}: scripts/${name} は IIFE 1 つにし、最初の文を if (!onSite()) return; にする`);
     }
+    if (script.file !== `generated/${name}`) fail(`${where}: サイト用のスクリプトの file は generated/${name} を指す`);
+    else if (source !== writeSites(written, wanted)) fail(`generated/${name} が古い —— pnpm run build を流す`);
+  } else {
+    if (readsSites(source)) fail(`${where}: sites の無いスクリプトが onSite() か catalogSites() を読む`);
+    if (script.file !== `scripts/${name}`) fail(`${where}: file は scripts/${name} を指す`);
   }
 
   rows.push({
@@ -296,6 +306,12 @@ for (const name of readdirSync(join(root, "examples")).filter((file) => file.end
   for (const problem of readParams(readFileSync(join(root, "examples", name), "utf8")).problems) {
     fail(`examples/${name}:${String(problem.line)}:${String(problem.col)} ${problem.message}`);
   }
+}
+
+// 作る物の無い生成物
+const made = new Set(catalog.scripts.filter((script) => script.sites !== undefined).map((script) => basename(String(script.file))));
+for (const name of existsSync(join(root, "generated")) ? readdirSync(join(root, "generated")) : []) {
+  if (!made.has(name)) fail(`generated/${name} を作るスクリプトが無い`);
 }
 
 if (problems.length > 0) {

@@ -3,11 +3,12 @@
   "//": [
     "package.json にコメントを書く方法の議論:",
     "https://stackoverflow.com/questions/14221579/how-do-i-add-comments-to-package-json-for-npm-install",
-    "runtime の依存は無い。台帳は書いたままの TS のバイト列に sha256 を打ち、ts-compile-service が",
+    "runtime の依存は無い。台帳は catalog.json の file が指す TS のバイト列に sha256 を打ち、ts-compile-service が",
     "型検査して JS にする。ページの中で評価されるのはその JS。dev の依存は typescript と zod で、",
     "`pnpm run typecheck` が型の門番の 1 か所目 (型が通らない TS は tag にならない)。2 か所目は",
     "ts-compile-service (クロールの段ごとに同じ検査)。zod の版は ts-compile-service と揃える。",
     "`pnpm run build` は catalog.json の sites の在るスクリプトに sites を書き込み、`generated/` に作る。",
+    "`scripts/` か sites を直したら流して、`generated/` も commit する。流し忘れは check が止める。",
     "`pnpm run check` は型 (`pnpm run typecheck`)・試験 (`pnpm run test`)・`tools/check.mjs` を順に流す。",
     "version は版ではない。版は tag (vX.Y.Z)。"
   ],
