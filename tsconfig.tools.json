@@ -1,6 +1,7 @@
 {
   // tools/read-params.ts は ts-compile-service に 1 バイトも変えずに写される。あちらの厳しさでここでも見る
   // (ここで見ないと、あちらの typecheck で初めて赤くなり、タグの打ち直しになる)。
+  // tools/write-sites.ts は写さないが、同じ設定で見る。
   "compilerOptions": {
     "target": "es2022",
     "lib": ["es2023"],
@@ -15,5 +16,5 @@
     "erasableSyntaxOnly": true,
     "noEmit": true
   },
-  "include": ["tools/read-params.ts"]
+  "include": ["tools/read-params.ts", "tools/write-sites.ts"]
 }
