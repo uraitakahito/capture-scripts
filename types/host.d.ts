@@ -21,8 +21,12 @@ declare var __bh: {
   opts: Record<string, Record<string, unknown> | undefined>;
   /**
    * クロールごとのシークレット。`params`（kind: secret）で宣言した名前を引く。値は文字列だけで、
-   * 渡されなければ undefined。記録（WACZ・台帳・ログ）に残るのは名前だけ —— ただし頁の中では隠せず、
-   * 通信に載せれば（URL や本文に書けば）WARC には残る
+   * 渡されなければ undefined。頁の中では隠せない（頁の JS も読める）。値は台帳にも取り込みのログにも残らない。
+   * **WARC からは既定で隠す** —— スクリプトが通信に載せても（URL・見出し・本文）、サイトが返しても `***` に
+   * 置き換わる（WARC の外の記録でも）。置き換えるのは値と、その符号化した形（% の符号化・form・JSON・HTML・
+   * base64）だけで、値から作った物（ハッシュや暗号文）は追わない。隠す値は 8 字以上（UTF-16 の code unit）が要り、
+   * 短い値を渡した取り込みと、取り込む URL に隠す値を書いた取り込みは、BrowserHive が断る。宣言に
+   * `archive: "keep"` と書いたシークレットだけは、通信の記録に値のまま残る（短くてよい）
    */
   secrets: Readonly<Record<string, string | undefined>>;
   /** 残り時間 (ms)。**協調的** —— 見なければ止まらないし、止めてもくれない */
