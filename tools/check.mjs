@@ -12,7 +12,7 @@
  *    IIFE 1 つで、その最初の文が `if (!onSite()) return;` であることを構文木で見る。`generated/` は
  *    作り直して比べ、古い物と作る物の無い物を止める。`sites` の無いスクリプトが `onSite()` を読むのも止める。
  * 3. **クロールごとの値の宣言 (`params`) の形と、source との一致** —— name の綴り・kind・required・
- *    summary・schema・重複・知らない鍵 (既定値はソースの中にしか置かない)。変数の正は source の
+ *    summary・schema・archive・重複・知らない鍵 (既定値はソースの中にしか置かない)。変数の正は source の
  *    `defineParams(z.object({ … }))` で、`catalog.json` の `params` (kind: variable) はその写し
  *    (`tools/read-params.ts` が走らせずに読み、1 つでも違えば止める)。シークレットは `params` が正で、
  *    宣言した名前を source が `__bh.secrets.<名前>` で読んでいること、逆に読んでいる名前は宣言に在ること
@@ -55,7 +55,7 @@ const HOSTNAME = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?
 const PARAM_NAME = /^[a-z][a-z0-9_]*$/;
 const PARAM_NAME_MAX = 64;
 const PARAM_KINDS = new Set(["variable", "secret"]);
-const PARAM_KEYS = new Set(["name", "kind", "required", "summary", "schema"]);
+const PARAM_KEYS = new Set(["name", "kind", "required", "summary", "schema", "archive"]);
 
 /**
  * コメントを除いた source。宣言と読む所の突き合わせに使う —— doc comment に書いた
@@ -111,13 +111,14 @@ const problems = [];
 const fail = (message) => problems.push(message);
 
 /**
- * @typedef {{ name: string, kind: "variable" | "secret", required?: boolean, summary: string, schema?: object }} Param
- *   クロールごとの値の宣言。既定値は書けない (ソースの中にだけ置く)。schema は kind: variable の写しだけ
+ * @typedef {{ name: string, kind: "variable" | "secret", required?: boolean, summary: string, schema?: object, archive?: "keep" }} Param
+ *   クロールごとの値の宣言。既定値は書けない (ソースの中にだけ置く)。schema は kind: variable の写しだけ。
+ *   archive は kind: secret だけで、"keep" なら値を WARC に残す (省けば隠す)
  * @type {{ profile: string, scripts: { id: string, phase: string, file: string, summary: string, sites?: string[], default?: boolean, params?: Param[] }[] }}
  */
 const catalog = JSON.parse(readFileSync(join(root, "catalog.json"), "utf8"));
 
-if (catalog.profile !== "capture-scripts/5") {
+if (catalog.profile !== "capture-scripts/6") {
   fail(`catalog.json の profile が知らない綴り: ${String(catalog.profile)}`);
 }
 
@@ -199,6 +200,14 @@ for (const script of catalog.scripts) {
         }
         if (param.kind === "secret" && param.schema !== undefined) {
           fail(`${label}: schema を書けるのは kind: variable だけ`);
+        }
+        // シークレットの値を WARC に残すか。省けば BrowserHive が隠す。台帳が読み、BrowserHive の secretArchive になる。
+        // 変数は値が WACZ の settings.variables に必ず残るので、選ぶ物が無い
+        if (param.archive !== undefined) {
+          if (param.kind !== "secret") fail(`${label}: archive を書けるのは kind: secret だけ`);
+          if (param.archive !== "keep") {
+            fail(`${label}: archive は "keep" だけ (省けば WARC から隠す。いまは ${JSON.stringify(param.archive)})`);
+          }
         }
         if (param.required !== undefined && typeof param.required !== "boolean") {
           fail(`${label}: required は true か false (省けば false)`);

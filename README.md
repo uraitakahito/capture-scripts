@@ -62,7 +62,8 @@ globalThis.__bh = {
   // クロールごとの変数。スクリプトは直に読まず、defineParams で読む（下の「クロールごとの値」）
   vars: { query: "個人情報" },
 
-  // クロールごとのシークレット。params（kind: secret）で宣言した名前。値は文字列で、記録には名前だけ残る
+  // クロールごとのシークレット。params（kind: secret）で宣言した名前。値は文字列で、WARC からは既定で隠す
+  // （下の「クロールごとの値」）
   secrets: { api_token: "…" },
 
   // 残り時間 (ms)。**協調的** —— 見なければ止まらないし、止めてもくれない
@@ -157,8 +158,8 @@ import { z } from "zod";
 
 （`params` は後の「クロールごとの値」の節。）
 
-いまの `catalog.json` の形は `profile` が `capture-scripts/5` で、`/4` までの台帳は断る
-（対象サイトや `default` や `params` を黙って捨てることはない）。
+いまの `catalog.json` の形は `profile` が `capture-scripts/6` で、`/5` までの台帳は断る
+（対象サイトや `default` や `params` や `archive` を黙って捨てることはない）。
 
 **対象サイトを使うのは台帳。** capture-ledger は対象サイトのあるスクリプトを、クロールの起点のどれかがそのサイトに
 あるときだけ入れる —— `scripts` を省いたクロールでは起点に合う物を自分で選び、起点に合わない
@@ -277,21 +278,54 @@ import { z } from "zod";
 
 ### シークレット —— `params`
 
-シークレットは記録に名前だけが残る。`catalog.json` の `params`（kind が `secret`）で宣言し、受け皿の `__bh.secrets.<名前>` で読む。
+シークレットは既定で値を記録から隠す。`catalog.json` の `params`（kind が `secret`）で宣言し、受け皿の `__bh.secrets.<名前>` で読む。
+
+```json
+{ "name": "api_token", "kind": "secret", "required": true, "summary": "サイトの API の鍵" }
+```
 
 - `required` は省けば false。渡されなければスクリプトは undefined を読む。true の物が無いクロールは台帳が 400 で断る
 - `summary` は説明。空は書けない。**既定値は書けない**（既定はソースの中に。知らない鍵は `check` が止める）
+- `archive` は省けば WARC から隠す。値を WARC に残すなら `"keep"` と書く（下の「WARC に残すか」）。書けるのは
+  kind が `secret` の宣言だけで、値は `"keep"` だけ
 
 **人が前もって Windmill の secret 変数 `f/waggle_secrets/<名前>` に置く**
 （置き方は [capture-scheduler](https://github.com/uraitakahito/capture-scheduler) の docs「クロール」）。頼みには書かない。
 台帳は在るかだけを確かめ（無ければ 400 で名前と path を言う）、Windmill の flow が走らせる直前に解いて BrowserHive に渡す。
 値を持つのは Windmill と、走っている頁だけ。
 
-頁の中では隠せない —— 受け皿は頁の JS から読める主ワールドに在る。スクリプトが値を通信に載せれば（URL や本文に書けば）、その要求は WARC に残る。
-隠すのは記録（WACZ・台帳・ログ）からだけ。
+頁の中では隠せない —— 受け皿は頁の JS から読める主ワールドに在る。隠すのは記録からだけで、値は台帳にも取り込みのログにも残らない。
 
 `pnpm run check` は、宣言した名前がソースに `__bh.secrets.<名前>` の形で出ること、逆にソースが
 読む名前が宣言に在ることを見る（コメントは除く。`["名前"]` の形は見ない）。書き忘れと綴り違いを、台帳に入れる前に止める。
+
+#### WARC に残すか —— `archive`
+
+**WARC からは既定で隠す**（BrowserHive v29.0.0 から）。スクリプトが値を通信に載せても（URL・見出し・本文）、サイトが
+値を返しても、BrowserHive は WARC の中でそれを `***` に置き換える。WARC の外（文書の URL・ページの文字と題・写し・
+ツリー・ログ・`.links.json`）でも置き換える。
+
+置き換えるのは値と、その符号化した形だけ（% の符号化・form・JSON・HTML・base64・Basic 認証）。**値から作った物
+（ハッシュや暗号文）と、サイトが新しく返した token は追わない** —— スクリプトが値をハッシュにして送れば、そのハッシュは
+WARC に残る。置き換えない所（スクリプトのコード・変数など）に同じ字が在れば、取り込みは失敗し、WACZ は置かれない。
+
+隠すシークレットのある取り込みには決まりがあり、外れれば BrowserHive が撮る前に 400 で断る（文には名前だけが出る）。
+
+- **隠す値は 8 字以上**（UTF-16 の code unit で数える）。短い値は無関係の字に当たる（`pro` なら `probe` が `***be` になる）。
+  短い値は長くするか、`keep` にする
+- **取り込む URL（起点など）に隠す値を書かない**
+- PNG・WebP・HTML・MHTML と web storage の値は一緒に頼めない（どれも値を置き換えられない）
+
+値を WARC に残すなら、宣言に `"archive": "keep"` と書く。何が送られ何が返ったかを、読み手が WARC で見られる。値は通信の
+記録（WARC の request・response・metadata のレコードと、その URL）に値のまま残り、ページの文字と題・写し・ツリー・ログからは
+消える。短くてよい。
+
+```json
+{ "name": "api_token", "kind": "secret", "required": true, "summary": "サイトの API の鍵", "archive": "keep" }
+```
+
+`/6` を読む台帳は、この宣言から BrowserHive の `secretArchive`（`{ "api_token": "keep" }`）を組み、Windmill の flow が
+渡す。どのシークレットを残したかは、WACZ の `settings.secretArchive` に残る。
 
 この repo にシークレットを読む見本は無い（秘密を要するサイトのスクリプトが無い）。
 
