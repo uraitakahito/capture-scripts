@@ -8,7 +8,7 @@
  *    `.ts` が全部列挙されている (サイト用の物は `generated/` の同じ名前で) / `id` が重複しない /
  *    `phase` が 2 値のどちらか。
  * 2. **対象サイト (`sites`) の形** —— 書くなら小文字のホスト名を 1 本以上・重複なし
- *    (台帳の CHECK と同じ式)。サイト用のスクリプトも、選ばれればどの頁でも走るので、`scripts/` が
+ *    (capture-ledger の CHECK と同じ式)。サイト用のスクリプトも、選ばれればどの頁でも走るので、`scripts/` が
  *    IIFE 1 つで、その最初の文が `if (!onSite()) return;` であることを構文木で見る。`generated/` は
  *    作り直して比べ、古い物と作る物の無い物を止める。`sites` の無いスクリプトが `onSite()` を読むのも止める。
  * 3. **クロールごとの値の宣言 (`params`) の形と、source との一致** —— name の綴り・kind・required・
@@ -16,13 +16,13 @@
  *    `defineParams(z.object({ … }))` で、`catalog.json` の `params` (kind: variable) はその写し
  *    (`tools/read-params.ts` が走らせずに読み、1 つでも違えば止める)。シークレットは `params` が正で、
  *    宣言した名前を source が `__bh.secrets.<名前>` で読んでいること、逆に読んでいる名前は宣言に在ること
- *    (コメントは除いて見る。`["名前"]` の形は見ない)。書き忘れと綴り違いを、台帳に入れる前に止める。
+ *    (コメントは除いて見る。`["名前"]` の形は見ない)。書き忘れと綴り違いを、登録する前に止める。
  * 4. **`import` の形** —— 受けるのは `import { z } from "zod"` と `import * as z from "zod/mini"` の 2 つで、
  *    先頭の文に 1 つだけ。`phase: preload` のスクリプトには `import` も `defineParams` も書けない。tsc は
  *    どの形でも通すので、ここで見ないと tag の後にクロールの段で初めて落ちる (ts-compile-service の
  *    `BH0003`・`BH0004` と同じ決まり)。
- * 5. **sha256 を印字する** —— 台帳 (`pnpm run scripts list`) に並ぶ digest と、
- *    目で突き合わせられるように。台帳が打つのは、`file` が指す TS のバイト列に対する値。
+ * 5. **sha256 を印字する** —— capture-ledger (`pnpm run scripts list`) に並ぶ digest と、
+ *    目で突き合わせられるように。capture-ledger が打つのは、`file` が指す TS のバイト列に対する値。
  *
  * ## 何を見ないか
  *
@@ -49,9 +49,9 @@ import { hasSiteGuard, readsSites, writeSites } from "./write-sites.ts";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const PHASES = new Set(["preload", "behavior"]);
-/** 対象サイトの形。小文字の ASCII のホスト名 (IDN は punycode)。台帳の CHECK (capture-ledger の 021) と同じ式 */
+/** 対象サイトの形。小文字の ASCII のホスト名 (IDN は punycode)。capture-ledger の CHECK (migration 021) と同じ式 */
 const HOSTNAME = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/;
-/** 値の名前の形。台帳の schema と BrowserHive の契約 (ValueName) と同じ式。長さは 64 字まで */
+/** 値の名前の形。capture-ledger の schema と BrowserHive の契約 (ValueName) と同じ式。長さは 64 字まで */
 const PARAM_NAME = /^[a-z][a-z0-9_]*$/;
 const PARAM_NAME_MAX = 64;
 const PARAM_KINDS = new Set(["variable", "secret"]);
@@ -158,7 +158,7 @@ for (const script of catalog.scripts) {
   if (typeof script.file !== "string" || !script.file.endsWith(".ts")) {
     fail(`${where}: file は .ts を指すこと (いまは ${String(script.file)})`);
   }
-  // 既定に入るか（台帳の enabled に写る）。省けば入る。真偽値のほかは書けない
+  // 既定に入るか（capture-ledger の enabled に写る）。省けば入る。真偽値のほかは書けない
   if (script.default !== undefined && typeof script.default !== "boolean") {
     fail(`${where}: default は true か false（省けば既定に入る）`);
   }
@@ -201,7 +201,7 @@ for (const script of catalog.scripts) {
         if (param.kind === "secret" && param.schema !== undefined) {
           fail(`${label}: schema を書けるのは kind: variable だけ`);
         }
-        // シークレットの値を WARC に残すか。省けば BrowserHive が隠す。台帳が読み、BrowserHive の secretArchive になる。
+        // シークレットの値を WARC に残すか。省けば BrowserHive が隠す。capture-ledger が読み、BrowserHive の secretArchive になる。
         // 変数は値が WACZ の settings.variables に必ず残るので、選ぶ物が無い
         if (param.archive !== undefined) {
           if (param.kind !== "secret") fail(`${label}: archive を書けるのは kind: secret だけ`);
@@ -235,7 +235,7 @@ for (const script of catalog.scripts) {
   }
 
   // シークレットの宣言と source の一致。宣言した名前を読んでいない = 書き忘れ、読んでいるのに宣言が無い = 綴り違いか
-  // 宣言の忘れ。どちらも台帳に入った後では、頁の中で undefined を読むだけで誰も気づかない
+  // 宣言の忘れ。どちらも登録された後では、頁の中で undefined を読むだけで誰も気づかない
   const secretReads = readSecrets(source);
   for (const name of declaredSecrets) {
     if (!secretReads.has(name)) {

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * サイト用のスクリプト (catalog.json の sites の在る物) について、scripts/<name> に sites を書き込み、
- * generated/<name> を作る。台帳が読むのはこちら。作り直しの比較は tools/check.mjs が行う。
+ * generated/<name> を作る。capture-ledger が読むのはこちら。作り直しの比較は tools/check.mjs が行う。
  */
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";

@@ -3,7 +3,7 @@
   "//": [
     "package.json にコメントを書く方法の議論:",
     "https://stackoverflow.com/questions/14221579/how-do-i-add-comments-to-package-json-for-npm-install",
-    "runtime の依存は無い。台帳は catalog.json の file が指す TS のバイト列に sha256 を打ち、ts-compile-service が",
+    "runtime の依存は無い。capture-ledger は catalog.json の file が指す TS のバイト列に sha256 を打ち、ts-compile-service が",
     "型検査して JS にする。ページの中で評価されるのはその JS。dev の依存は typescript と zod で、",
     "`pnpm run typecheck` が型の門番の 1 か所目 (型が通らない TS は tag にならない)。2 か所目は",
     "ts-compile-service (クロールの段ごとに同じ検査)。zod の版は ts-compile-service と揃える。",

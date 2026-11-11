@@ -11,19 +11,19 @@ BrowserHive が取り込むページの中で走らせるスクリプト。TypeS
 （`scripts` 表）で、この repo はその**出どころ**。
 
 ```
-capture-scripts  ──→  capture-ledger（台帳）  ──→  Windmill の flow  ──→  ts-compile-service  ──→  BrowserHive  ──→  ページ
- (TS と phase)          (TS の版を固定する)        (運ぶだけ)          (型検査して JS に)      (JS を評価する)
+capture-scripts  ──→  capture-ledger  ──→  Windmill の flow  ──→  ts-compile-service  ──→  BrowserHive  ──→  ページ
+ (TS と phase)        (TS の版を固定)      (運ぶだけ)          (型検査して JS に)      (JS を評価する)
 ```
 
 ## 中身
 
 | | |
 |---|---|
-| `scripts/*.ts` | ページの中で走らせるスクリプトを書く所。サイト用でなければ、書いたままのバイト列が台帳に入る |
-| `generated/*.ts` | サイト用のスクリプトに `sites` を書き込んだ TS。`pnpm run build` が作り、commit する。台帳に入るのはこちら |
+| `scripts/*.ts` | ページの中で走らせるスクリプトを書く所。サイト用でなければ、書いたままのバイト列が登録される |
+| `generated/*.ts` | サイト用のスクリプトに `sites` を書き込んだ TS。`pnpm run build` が作り、commit する。登録されるのはこちら |
 | `types/host.d.ts` | 受け皿 `__bh` の型。[ts-compile-service](https://github.com/uraitakahito/ts-compile-service) にも写される（下の「2 つの門番」） |
 | `types/authoring.d.ts` | `onSite()` と `catalogSites()` の宣言。書く所（`scripts/`）でだけ見える。ts-compile-service へは写さない |
-| `catalog.json` | ソースが自分では言えないこと —— `id` と `phase`、台帳が読む `file`、一言の `summary`、サイト用なら `sites`、既定に入れないなら `default`、シークレットを読むなら `params`（変数の `params` はソースの宣言の写し） |
+| `catalog.json` | ソースが自分では言えないこと —— `id` と `phase`、capture-ledger が読む `file`、一言の `summary`、サイト用なら `sites`、既定に入れないなら `default`、シークレットを読むなら `params`（変数の `params` はソースの宣言の写し） |
 | `tsconfig.json` | strict と `erasableSyntaxOnly`。enum のような「剥がして消えない構文」を書かせない |
 | `tsconfig.generated.json` | `generated/` を `types/authoring.d.ts` なしで見る。書き込み損ねた `onSite()` はここで `TS2304` になる |
 | `tools/check.mjs` | `pnpm run check` の最後。`catalog.json` と一致するか・対象サイト（`sites`）と `default` の形・見分けの形と `generated/` の古さ・`params` の形と source との一致・`import` の形・sha256 はいくつか（前は tsc と試験） |
@@ -32,17 +32,17 @@ capture-scripts  ──→  capture-ledger（台帳）  ──→  Windmill の 
 | `test/*.test.mjs` | 書き込みと見分けの判定の試験 |
 | `examples/*.ts` | 書き方の見本。配らないので `catalog.json` には載せず、tsc だけが読む |
 
-runtime の依存は無い。台帳が読むのは `catalog.json` の `file` が指す TS のバイト列そのもので、それに `sha256` を打つ。
+runtime の依存は無い。capture-ledger が読むのは `catalog.json` の `file` が指す TS のバイト列そのもので、それに `sha256` を打つ。
 JS への変換は Windmill の flow の中で ts-compile-service がクロールの段ごとに行い、BrowserHive は
 その JS を `sha256` で照合する —— 2 つの hash が、変換した場所で継がれる。dev の依存は typescript と zod
 （zod は型のため。ページの JS に入れるのは ts-compile-service。下の「Zod」）。
 
 ## 2 つの門番 —— 型が通らない TS は走らない
 
-1. **この repo の CI** (`tsc --noEmit`)。型が通らなければ tag にならず、台帳にも入らない。`scripts/` と `generated/` は
+1. **この repo の CI** (`tsc --noEmit`)。型が通らなければ tag にならず、登録もされない。`scripts/` と `generated/` は
    別の program で見る。`generated/` の program には `onSite()` の宣言を見せないので、書き込み損ねた行もここで止まる
 2. **ts-compile-service**。クロールの段ごとに同じ tsconfig で型検査し、通らなければ 422 を返して段ごと落とす
-   （台帳には CLI でも足せるので、tag を経ない道にも門番が要る）
+   （capture-ledger には CLI でも足せるので、tag を経ない道にも門番が要る）
 
 受け皿の型 `types/host.d.ts` は 2 か所に在る（ここと ts-compile-service）。**直すならここが正**で、
 あちらの CI が tag の raw と 1 バイトも違わないことを見る。
@@ -56,7 +56,7 @@ BrowserHive はスクリプトを走らせる前に、**受け皿 `__bh`** を 1
 
 ```js
 globalThis.__bh = {
-  // 版の設定（台帳に入れるときの --options）を id で引く。中身は検査されていない
+  // 版の設定（登録するときの --options）を id で引く。中身は検査されていない
   opts: { autoscroll: { maxSteps: 80 } },
 
   // クロールごとの変数。スクリプトは直に読まず、defineParams で読む（下の「クロールごとの値」）
@@ -111,7 +111,7 @@ import { z } from "zod";
 待たない続きで書いた行も、書いたスクリプトに付く。見本は `egov-law-search` の、検索窓が無いときの `log.warn`。
 
 **既定値はソースの中にしか置かない。** `catalog.json` に写すと 2 か所になり、必ず片方が腐る。
-配備ごとに変えたい値は、台帳に入れるときに渡すもの（`--options`）で、スクリプトの性質ではない。
+配備ごとに変えたい値は、登録するときに渡すもの（`--options`）で、スクリプトの性質ではない。
 クロールごとに変えたい値は、`defineParams` で宣言して頼みで渡すもの（下の「クロールごとの値」）。
 任意の値の既定は `.optional()` と `??` で書く。`.default` は読めない（`pnpm run check` が止める）。
 
@@ -158,10 +158,10 @@ import { z } from "zod";
 
 （`params` は後の「クロールごとの値」の節。）
 
-いまの `catalog.json` の形は `profile` が `capture-scripts/6` で、`/5` までの台帳は断る
+いまの `catalog.json` の形は `profile` が `capture-scripts/6` で、`/5` までの capture-ledger は断る
 （対象サイトや `default` や `params` や `archive` を黙って捨てることはない）。
 
-**対象サイトを使うのは台帳。** capture-ledger は対象サイトのあるスクリプトを、クロールの起点のどれかがそのサイトに
+**対象サイトを使うのは capture-ledger。** 対象サイトのあるスクリプトを、クロールの起点のどれかがそのサイトに
 あるときだけ入れる —— `scripts` を省いたクロールでは起点に合う物を自分で選び、起点に合わない
 物を名指せば 400 で断る。[capture-workbench](https://github.com/uraitakahito/capture-workbench) は対象サイトを見せ、新しいクロールの画面で同じ決まりのとおりに選ぶ。
 
@@ -191,7 +191,7 @@ import { z } from "zod";
 その場の TS や `scripts add` で入れるスクリプトは、`location.hostname` を自分で比べる。比較は `===` を `||` で繋ぐ。
 `Array.prototype.includes` は相手のサイトの JS が差し替えられる。
 
-**撮れないサイトのスクリプトは足さない。** 台帳のクロールは robots.txt を守るので、robots が断る頁
+**撮れないサイトのスクリプトは足さない。** capture-ledger のクロールは robots.txt を守るので、robots が断る頁
 （たとえば Google の `/search`）では、スクリプトは 1 度も走らない。
 
 首相官邸（`www.kantei.go.jp`）も入れていない（2026-10-29 に確かめた）。`HeadlessChrome` と名乗る取得には、
@@ -201,7 +201,7 @@ import { z } from "zod";
 
 ## 実行の順 —— `catalog.json` の並び
 
-`catalog.json` の `scripts` の並びが、既定の実行順になる。台帳は取り込みのときにこの並びを写し、`scripts` を
+`catalog.json` の `scripts` の並びが、既定の実行順になる。capture-ledger は取り込みのときにこの並びを写し、`scripts` を
 省いたクロールと、新しいクロールの画面の初めの順に使う。人はその画面の ↑↓ で、そのクロールの順を変えられる。
 
 `autofetch` を最後に置くのは、読んだ時点でページに書かれている候補しか取りに行かないから。`autoscroll` の
@@ -209,8 +209,8 @@ import { z } from "zod";
 
 ## 既定に入らないスクリプト —— `default`
 
-`catalog.json` の項目に `"default": false` を書くと、そのスクリプトは台帳の既定に入らない。
-台帳は取り込みのときにこれを `enabled` に写し、`scripts` を省いたクロール（新しいクロールの画面の
+`catalog.json` の項目に `"default": false` を書くと、そのスクリプトは capture-ledger の既定に入らない。
+capture-ledger は取り込みのときにこれを `enabled` に写し、`scripts` を省いたクロール（新しいクロールの画面の
 初めのチェックと、毎朝の定期のクロール）では走らせない。名指しすれば走る。省けば既定に入る。
 
 ```json
@@ -233,14 +233,14 @@ BrowserHive の本文の取り方を直した後で考え直す。
 
 ## クロールごとの値 —— 変数とシークレット
 
-版の設定（`--options`）は台帳に入れるときに決まり、同じ版のクロールは全部同じ値を読む。
+版の設定（`--options`）は登録するときに決まり、同じ版のクロールは全部同じ値を読む。
 **クロールごとに変えたい値**（検索語、サイトの鍵）は、変数かシークレットで読む。名前は英小文字で始め、
-英小文字・数字・`_` で 64 字まで（`^[a-z][a-z0-9_]*$`）。名前の空間は台帳の中で 1 つ —— 2 本のスクリプトが同じ名前を
-宣言すれば、同じ値を読む（形が違う宣言を並べれば台帳が 400 で断る）。
+英小文字・数字・`_` で 64 字まで（`^[a-z][a-z0-9_]*$`）。名前の空間は capture-ledger の中で 1 つ —— 2 本のスクリプトが同じ名前を
+宣言すれば、同じ値を読む（形が違う宣言を並べれば capture-ledger が 400 で断る）。
 
 ### 変数 —— `defineParams`
 
-変数は値が記録に残る（WACZ の `settings.variables`・台帳の行・workbench）。スクリプトの中で宣言して読む。
+変数は値が記録に残る（WACZ の `settings.variables`・capture-ledger の行・workbench）。スクリプトの中で宣言して読む。
 
 ```ts
 import { z } from "zod";
@@ -257,19 +257,19 @@ import { z } from "zod";
 ```
 
 - **`.optional()` を付けなければ必須。** 渡さないクロールは ts-compile-service が `BH0001` で止める
-  （`egov-law-search.ts:20:7 BH0001 必須の変数 query が渡されていない`）。台帳は始める前に訊くので、クロールの行は立たない
+  （`egov-law-search.ts:20:7 BH0001 必須の変数 query が渡されていない`）。capture-ledger は始める前に訊くので、クロールの行は立たない
 - **宣言は走らせずに読む**（`tools/read-params.ts`）。書けるのは `z.object({ 名前: 値 })` で、値は `z.string()` か `z.enum([…])`、
   続けられるのは `.min`・`.max`・`.length`・`.optional`・`.describe` だけ。引数はリテラルだけ。ほかは `BH0002`。
-  `.default` は既定をソースの外から読めなくし、`.regex` は利用者の正規表現を台帳で走らせることになるので読まない
+  `.default` は既定をソースの外から読めなくし、`.regex` は利用者の正規表現を capture-ledger で走らせることになるので読まない
 - **値は文字列だけ。** 数や JSON はスクリプトが読み替える
 - **1 本に 1 回。** `__bh.vars` は直に読めない（型に無く、`@ts-nocheck` でも `BH0005` で止まる）。`preload` では使えない（`BH0004`）
 - **`zod/mini` では宣言できない。** `defineParams` は `zod` の型を受ける
 - **`z` を宣言の中でしか読まなければ、Zod は JS に入らない。** `defineParams(…)` は JS で `globalThis.__bh.vars` に置き換わる
 
-**頼みで渡す**（台帳の `POST /api/crawls` の `variables`。workbench の新しいクロールの画面は、選んだスクリプトの宣言から
-欄を作る）。宣言に無い名前を渡せば、`.min` などに合わない値を渡せば、台帳が 400 で断る。
+**頼みで渡す**（capture-ledger の `POST /api/crawls` の `variables`。workbench の新しいクロールの画面は、選んだスクリプトの宣言から
+欄を作る）。宣言に無い名前を渡せば、`.min` などに合わない値を渡せば、capture-ledger が 400 で断る。
 
-台帳は `catalog.json` しか読まないので、**スクリプト集の変数は `catalog.json` の `params` に写す**
+capture-ledger は `catalog.json` しか読まないので、**スクリプト集の変数は `catalog.json` の `params` に写す**
 （`summary` は `.describe` の字で、スクリプト集では必須）。`pnpm run check` が 1 つでも違えば止め、正しい形を出す。
 
 ```json
@@ -284,20 +284,20 @@ import { z } from "zod";
 { "name": "api_token", "kind": "secret", "required": true, "summary": "サイトの API の鍵" }
 ```
 
-- `required` は省けば false。渡されなければスクリプトは undefined を読む。true の物が無いクロールは台帳が 400 で断る
+- `required` は省けば false。渡されなければスクリプトは undefined を読む。true の物が無いクロールは capture-ledger が 400 で断る
 - `summary` は説明。空は書けない。**既定値は書けない**（既定はソースの中に。知らない鍵は `check` が止める）
 - `archive` は省けば WARC から隠す。値を WARC に残すなら `"keep"` と書く（下の「WARC に残すか」）。書けるのは
   kind が `secret` の宣言だけで、値は `"keep"` だけ
 
 **人が前もって Windmill の secret 変数 `f/waggle_secrets/<名前>` に置く**
 （置き方は [capture-scheduler](https://github.com/uraitakahito/capture-scheduler) の docs「クロール」）。頼みには書かない。
-台帳は在るかだけを確かめ（無ければ 400 で名前と path を言う）、Windmill の flow が走らせる直前に解いて BrowserHive に渡す。
+capture-ledger は在るかだけを確かめ（無ければ 400 で名前と path を言う）、Windmill の flow が走らせる直前に解いて BrowserHive に渡す。
 値を持つのは Windmill と、走っている頁だけ。
 
-頁の中では隠せない —— 受け皿は頁の JS から読める主ワールドに在る。隠すのは記録からだけで、値は台帳にも取り込みのログにも残らない。
+頁の中では隠せない —— 受け皿は頁の JS から読める主ワールドに在る。隠すのは記録からだけで、値は capture-ledger にも取り込みのログにも残らない。
 
 `pnpm run check` は、宣言した名前がソースに `__bh.secrets.<名前>` の形で出ること、逆にソースが
-読む名前が宣言に在ることを見る（コメントは除く。`["名前"]` の形は見ない）。書き忘れと綴り違いを、台帳に入れる前に止める。
+読む名前が宣言に在ることを見る（コメントは除く。`["名前"]` の形は見ない）。書き忘れと綴り違いを、登録する前に止める。
 
 #### WARC に残すか —— `archive`
 
@@ -324,7 +324,7 @@ WARC に残る。置き換えない所（スクリプトのコード・変数な
 { "name": "api_token", "kind": "secret", "required": true, "summary": "サイトの API の鍵", "archive": "keep" }
 ```
 
-`/6` を読む台帳は、この宣言から BrowserHive の `secretArchive`（`{ "api_token": "keep" }`）を組み、Windmill の flow が
+`/6` を読む capture-ledger は、この宣言から BrowserHive の `secretArchive`（`{ "api_token": "keep" }`）を組み、Windmill の flow が
 渡す。どのシークレットを残したかは、WACZ の `settings.secretArchive` に残る。
 
 この repo にシークレットを読む見本は無い（秘密を要するサイトのスクリプトが無い）。
@@ -354,14 +354,14 @@ JS に束ねるのは ts-compile-service で、型は dev の依存の `zod` か
 
 ## 使う
 
-台帳へまとめて入れる（capture-ledger 側）:
+まとめて登録する（capture-ledger 側）:
 
 ```sh
 pnpm run scripts import .upstream/capture-scripts
 pnpm run scripts list
 ```
 
-同じバイト列を入れ直しても**版は増えない**。台帳が持つのはソースのバイト列で、
+同じバイト列を入れ直しても**版は増えない**。capture-ledger が持つのはソースのバイト列で、
 どのファイルから読んだかではないため。
 
 ## 足す
@@ -370,7 +370,7 @@ pnpm run scripts list
 2. `catalog.json` に `id` / `phase` / `file` / `summary` を足す（サイト用なら `sites` も足し、`file` は `generated/<id>.ts`。既定に入れないなら `"default": false`、クロールごとの値を読むなら `params` も。変数はソースの宣言の写し）
 3. サイト用なら `pnpm run build`
 4. `pnpm run check`（tsc → 試験 → `catalog.json` との一致と対象サイト・`params` の形 → sha256 の印字）
-5. 台帳へ入れ直す
+5. 登録し直す
 
 ## この検査が言えないこと
 

@@ -9,16 +9,16 @@
  *
  * ## 読むのは値が文字列の物だけ
  *
- * 値は `POST /api/crawls` の `variables` から文字列で来て、台帳が JSON Schema で検査する。だから呼べるのは
+ * 値は `POST /api/crawls` の `variables` から文字列で来て、capture-ledger が JSON Schema で検査する。だから呼べるのは
  * JSON Schema に写せる物だけ。`.default` は既定をソースの外から読めなくし (既定は `??` で書く)、`.regex` は
- * 利用者の正規表現を台帳で走らせることになり (ReDoS)、`.refine` は走らせないと分からない。
+ * 利用者の正規表現を capture-ledger で走らせることになり (ReDoS)、`.refine` は走らせないと分からない。
  *
  * 答えの `schema` の鍵は `type`・`minLength`・`maxLength`・`enum` だけ。
  */
 import ts from "typescript";
 import { z } from "zod";
 
-/** 値の名前の形。台帳の schema と BrowserHive の契約 (ValueName) と同じ式。 */
+/** 値の名前の形。capture-ledger の schema と BrowserHive の契約 (ValueName) と同じ式。 */
 const NAME = /^[a-z][a-z0-9_]*$/;
 const NAME_MAX = 64;
 /**

@@ -1,5 +1,5 @@
 {
-  // generated/ を台帳が読む形で見る。types/authoring.d.ts を見せないので、書き込み損ねた onSite() は TS2304 で止まる
+  // generated/ を capture-ledger が読む形で見る。types/authoring.d.ts を見せないので、書き込み損ねた onSite() は TS2304 で止まる
   "extends": "./tsconfig.json",
   "include": ["generated/*.ts", "types/host.d.ts"]
 }

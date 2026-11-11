@@ -1,6 +1,6 @@
 name: ci
 
-# runtime の依存は無い (台帳は catalog.json の file が指す TS のバイト列を持ち、ts-compile-service が JS にする。
+# runtime の依存は無い (capture-ledger は catalog.json の file が指す TS のバイト列を持ち、ts-compile-service が JS にする。
 # ページの中で評価されるのはその JS)。dev の依存は typescript と zod で、tsc が型の門番の 1 か所目
 # —— **型が通らない TS は tag にならない**。2 か所目は ts-compile-service (クロールの段ごとに同じ型検査)。
 #
