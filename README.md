@@ -115,9 +115,9 @@ import { z } from "zod";
 クロールごとに変えたい値は、`defineParams` で宣言して頼みで渡すもの（下の「クロールごとの値」）。
 任意の値の既定は `.optional()` と `??` で書く。`.default` は読めない（`pnpm run check` が止める）。
 
-## 2 つの口 —— `phase`
+## 2 つの phase —— `phase`
 
-`catalog.json` の `phase` が、BrowserHive のどちらの注入口を使うかを決める。
+`catalog.json` の `phase` が、BrowserHive がどちらの時（phase）にスクリプトを差し込むかを決める。
 **約束が違うので、混ぜられない。**
 
 | | `behavior` | `preload` |
