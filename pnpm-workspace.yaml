@@ -1,0 +1,4 @@
+# build script を走らせるかの名指し。pnpm 11 は未許可の build script があると install を落とす。
+# esbuild の postinstall は binary の確かめと最適化だけで、binary は @esbuild/<platform> から実行時に読むので要らない。
+allowBuilds:
+  esbuild: false

@@ -21,28 +21,32 @@ capture-scripts  ──→  capture-ledger  ──→  Windmill の flow  ──
 
 | | |
 |---|---|
-| `scripts/*.ts` | ページの中で走らせるスクリプトを書く所。サイト用でなければ、書いたままのバイト列が登録される |
-| `generated/*.ts` | サイト用のスクリプトに `sites` を書き込んだ TS。`pnpm run build` が作り、commit する。登録されるのはこちら |
+| `scripts/*.ts` | ページの中で走らせるスクリプトを書く所。サイト用でも束ねる物でもなければ、書いたままのバイト列が登録される |
+| `generated/*.ts` | サイト用のスクリプトに `sites` を書き込んだ TS と、束ねるスクリプトを import する package ごと 1 本にした JS（先頭に `// @ts-nocheck`）。`pnpm run build` が作り、commit する。登録されるのはこちら |
 | `types/host.d.ts` | 受け皿 `__bh` の型。[ts-compile-service](https://github.com/uraitakahito/ts-compile-service) にも写される（下の「2 つの門番」） |
 | `types/authoring.d.ts` | `onSite()` と `catalogSites()` の宣言。書く所（`scripts/`）でだけ見える。ts-compile-service へは写さない |
 | `catalog.json` | ソースが自分では言えないこと —— `id` と `phase`、capture-ledger が読む `file`、一言の `summary`、サイト用なら `sites`、既定に入れないなら `default`、シークレットを読むなら `params`（変数の `params` はソースの宣言の写し） |
-| `tsconfig.json` | strict と `erasableSyntaxOnly`。enum のような「剥がして消えない構文」を書かせない |
-| `tsconfig.generated.json` | `generated/` を `types/authoring.d.ts` なしで見る。書き込み損ねた `onSite()` はここで `TS2304` になる |
-| `tools/check.mjs` | `pnpm run check` の最後。`catalog.json` と一致するか・対象サイト（`sites`）と `default` の形・見分けの形と `generated/` の古さ・`params` の形と source との一致・`import` の形・sha256 はいくつか（前は tsc と試験） |
+| `tsconfig.json` | strict と `erasableSyntaxOnly`。enum のような「剥がして消えない構文」を書かせない。束ねる package の型は `moduleResolution: "bundler"` で引く |
+| `tsconfig.generated.json` | `generated/` を `types/authoring.d.ts` なしで見る。書き込み損ねた `onSite()` はここで `TS2304` になる。束ねた JS は `// @ts-nocheck` なので構文だけを見る |
+| `tools/check.mjs` | `pnpm run check` の最後。`catalog.json` と一致するか・対象サイト（`sites`）と `default` の形・見分けの形と `generated/` の古さ・束ねるスクリプトの import と束の古さ・`params` の形と source との一致・`import` の形・sha256 はいくつか（前は tsc と試験） |
 | `tools/read-params.ts` | `defineParams` の宣言を走らせずに読む係。[ts-compile-service](https://github.com/uraitakahito/ts-compile-service) にも 1 バイトも変えずに写される |
-| `tools/build.mjs`・`tools/write-sites.ts` | `pnpm run build`。`sites` を TS に書き込み、`generated/` を作る |
-| `test/*.test.mjs` | 書き込みと見分けの判定の試験 |
+| `tools/build.mjs`・`tools/write-sites.ts` | `pnpm run build`。`sites` を TS に書き込み、束ねるスクリプトを束ねて、`generated/` を作る |
+| `tools/bundle.mjs` | 束ねるスクリプトの目印（`BUNDLES`）と束ね方（esbuild）。`tools/build.mjs`・`tools/check.mjs`・試験が同じ物を読む（下の「外のライブラリを束ねる」） |
+| `test/*.test.mjs` | 書き込みと見分けの判定の試験と、束ねた JS の形の試験 |
 | `examples/*.ts` | 書き方の見本。配らないので `catalog.json` には載せず、tsc だけが読む |
 
-runtime の依存は無い。capture-ledger が読むのは `catalog.json` の `file` が指す TS のバイト列そのもので、それに `sha256` を打つ。
+capture-ledger が読むのは `catalog.json` の `file` が指す TS のバイト列そのもので、それに `sha256` を打つ。
 JS への変換は Windmill の flow の中で ts-compile-service がクロールの段ごとに行い、BrowserHive は
-その JS を `sha256` で照合する —— 2 つの hash が、変換した場所で継がれる。dev の依存は typescript と zod
-（zod は型のため。ページの JS に入れるのは ts-compile-service。下の「Zod」）。
+その JS を `sha256` で照合する —— 2 つの hash が、変換した場所で継がれる。依存はどれも dev の物で、
+typescript と zod（zod は型のため。ページの JS に入れるのは ts-compile-service。下の「Zod」）と、
+esbuild と `@mediapipe/tasks-vision`（`face-mustache` を束ねるため。束ねた JS は `generated/` に commit するので、
+登録されるバイト列にライブラリが入る。下の「外のライブラリを束ねる」）。
 
 ## 2 つの門番 —— 型が通らない TS は走らない
 
 1. **この repo の CI** (`tsc --noEmit`)。型が通らなければ tag にならず、登録もされない。`scripts/` と `generated/` は
-   別の program で見る。`generated/` の program には `onSite()` の宣言を見せないので、書き込み損ねた行もここで止まる
+   別の program で見る。`generated/` の program には `onSite()` の宣言を見せないので、書き込み損ねた行もここで止まる。
+   束ねた JS は `// @ts-nocheck` で、型は束ねる前の `scripts/` で見る
 2. **ts-compile-service**。クロールの段ごとに同じ tsconfig で型検査し、通らなければ 422 を返して段ごと落とす
    （capture-ledger には CLI でも足せるので、tag を経ない道にも門番が要る）
 
@@ -227,8 +231,8 @@ capture-ledger は取り込みのときにこれを `enabled` に写し、`scrip
 }
 ```
 
-いま既定に入らないのは `autofetch` だけ。2026-10-29 の e-Gov 法令検索の取り込みで、`autofetch` が取りに行った
-6 本はどれもブラウザが読み済みで、新しく取れた物は 0 本だった。そのうち `@import` で読まれていた CSS 2 本は、
+`autofetch` を既定から外したのは、2026-10-29 の e-Gov 法令検索の取り込みで、`autofetch` が取りに行った
+6 本はどれもブラウザが読み済みで、新しく取れた物は 0 本だったから。そのうち `@import` で読まれていた CSS 2 本は、
 `fetch()` で取り直した本文が化けて記録された（BrowserHive の本文の取り方の不具合）。`autofetch` を直すかは、
 BrowserHive の本文の取り方を直した後で考え直す。
 
@@ -346,7 +350,8 @@ JS に束ねるのは ts-compile-service で、型は dev の依存の `zod` か
 見本は `examples/zod-in-page.ts`。
 
 - **受けるのはこの 2 形だけ。** 別名（`import { z as zod }`）・既定の import・`import type` は ts-compile-service が
-  `BH0003` で断り、ほかの package は `TS2307` になる。`pnpm run check` も同じ形を見る
+  `BH0003` で断り、ほかの package は `TS2307` になる。`pnpm run check` も同じ形を見る。ほかのライブラリは、この repo で
+  束ねる（下の「外のライブラリを束ねる」）
 - **説明のコメントは `import` の後に書く。** `import` の前のコメントは JS に残らない（`// @ts-nocheck` は前に在ってよい）
 - **`parse` より `safeParse`。** `parse` の例外は「1 本の書き損じで他を落とさない」決まりで行 1 つになり、minify された束では
   `l: ZodError` としか残らない。`safeParse` と `__bh.log.error` なら、どの項目が違ったかが残る。形が合わなくてもクロールは成功のまま
@@ -355,6 +360,41 @@ JS に束ねるのは ts-compile-service で、型は dev の依存の `zod` か
 - **クロールごとの値を読むのも同じ `z`。** 宣言の中でしか `z` を読まなければ、Zod は JS に入らない（「クロールごとの値」）
 - **厳しい CSP のページでも動く。** Zod は速い検査を `new Function` で作ろうとし、`script-src` が eval を禁じるページでは
   投げるうえ、相手のサイトへ違反の報告が飛ぶ。ts-compile-service は `jitless` で束ねるので、どちらも起きない
+
+## 外のライブラリを束ねる —— `face-mustache`
+
+ts-compile-service が束ねるのは Zod だけ。ほかのライブラリを使うスクリプトは、この repo の `pnpm run build` が
+esbuild で package ごと 1 本の JS（IIFE・minify）に束ね、`generated/<id>.ts` に書く。登録されるのはこの束で、
+capture-ledger の `sha256` も、WACZ の `behaviors/custom.jsonl` に残る JS も、ライブラリのコードを含む。
+
+見本は `face-mustache`。取り込みのページの写真（主フレームと同じ origin の子フレームの `<img>`）から顔を見つけ、
+鼻と口の間にヒゲの絵を `<svg>` で重ねる（`data-capture-script="face-mustache"` を付ける）。置き方は
+[ICS MEDIA の記事](https://ics.media/entry/240709/)と同じ 6 点（両目・鼻先・口の中心・両耳）から決め、検出は
+`@mediapipe/tasks-vision`（Apache-2.0）の `FaceDetector`。report には絵と顔の数・描いた数・準備と全体の ms・
+顔ごとの位置・大きさ・傾き・確からしさを書く。
+
+- **`default: false`。** 顔を検出する絵が在る頁では、走るたびに WASM（約 11 MB）と読み込み役の JS とモデルを外
+  （jsDelivr・storage.googleapis.com）から読む。名指したクロールでだけ走る。読んだ物は通信の記録として WARC に残る
+- **版は束ねた JS と WASM の URL で揃える。** WASM は JS と同じ版でなければ動かない。ソースは `declare const` の
+  識別子で URL を書き、build が esbuild の `define` で入っている package の版に置き換える。package.json の版
+  （範囲でなく 1 つの版）と `node_modules` の版が違えば、build と check が止まる
+- **1.x の `@mediapipe/tasks-vision` は使わない。** 使い方の統計を外（`odml.pa.googleapis.com`）へ送る
+- **読み込み元を替える設定は持たない。** 版の設定（`--options`）は WACZ に残らないので、替えると何を読んだかが記録から言えなくなる
+
+束ねるスクリプトを足すには、`tools/bundle.mjs` の `BUNDLES` に `scripts/` の中の名前と、import してよい package
+（`packages`）と、版を入れる識別子（`versions`）を書き、package を devDependencies に版ちょうどで足す。
+`catalog.json` の `file` は `generated/<id>.ts`。`pnpm run check` と試験が見ること:
+
+- `generated/<id>.ts` が作り直した物とバイト列まで同じ（流し忘れを止める）
+- 束ねるソースの import は `packages` に名指した package からだけ（`import()` と相対の path も止める）。束に `import`・`export` が無い
+- 束の先頭が `// @ts-nocheck`、`vm.Script` で classic script として読める（ts-compile-service の `BH0006` と同じ見方）
+- 束を TS として読んで、型引数・`as`・非 null の表明のような TS だけの節が 0（tsc が minify した `a<b>(c)` を型引数つきの
+  呼び出しと読むと、意味が変わる）
+- 束の中の外の部品の URL の版が、入っている package の版と同じ
+
+束ねる JS には `// @ts-nocheck` を付ける。ライブラリの JS は型の注記を持たないので、tsc に意味を検査させると通らない。
+型は束ねる前の `scripts/` を tsc が見る。説明のコメントも束には残らない（license の注記は残す）ので、`scripts/` で読む。
+対象サイト（`sites`）と束ねるのは、まだ組み合わせられない（`pnpm run check` が止める）。
 
 ## 使う
 
@@ -371,8 +411,9 @@ pnpm run scripts list
 ## 足す
 
 1. `scripts/<id>.ts` を書く（上の作法 3 つ）
-2. `catalog.json` に `id` / `phase` / `file` / `summary` を足す（サイト用なら `sites` も足し、`file` は `generated/<id>.ts`。既定に入れないなら `"default": false`、クロールごとの値を読むなら `params` も。変数はソースの宣言の写し）
-3. サイト用なら `pnpm run build`
+2. `catalog.json` に `id` / `phase` / `file` / `summary` を足す（サイト用なら `sites` も足し、`file` は `generated/<id>.ts`。既定に入れないなら `"default": false`、クロールごとの値を読むなら `params` も。変数はソースの宣言の写し）。
+   外のライブラリを使うなら `tools/bundle.mjs` の `BUNDLES` にも足し、`file` は `generated/<id>.ts`（上の「外のライブラリを束ねる」）
+3. サイト用か束ねる物なら `pnpm run build`
 4. `pnpm run check`（tsc → 試験 → `catalog.json` との一致と対象サイト・`params` の形 → sha256 の印字）
 5. 登録し直す
 
@@ -384,7 +425,9 @@ pnpm run scripts list
 （capture-fixtures の `/responsive-images` に対して、ブラウザが自分では要求しない
 画像の変種が届いたかを数える）。
 
-ここの検査は「型が通らない TS」と「`catalog.json` との食い違い」と「見分けの形の違い」を止めるためのもの。
+`face-mustache` が顔を見つけてヒゲを重ねるかも、ここでは言えない（本物のブラウザと外の部品が要る）。
+
+ここの検査は「型が通らない TS」と「`catalog.json` との食い違い」と「見分けの形の違い」と「束の古さと形」を止めるためのもの。
 
 ## リリース
 

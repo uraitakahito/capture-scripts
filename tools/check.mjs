@@ -5,23 +5,26 @@
  * ## 何を見るか
  *
  * 1. **catalog.json と実体が一致するか** —— 列挙された `file` が在る / `scripts/` の
- *    `.ts` が全部列挙されている (サイト用の物は `generated/` の同じ名前で) / `id` が重複しない /
+ *    `.ts` が全部列挙されている (サイト用と束ねる物は `generated/` の同じ名前で) / `id` が重複しない /
  *    `phase` が 2 値のどちらか。
  * 2. **対象サイト (`sites`) の形** —— 書くなら小文字のホスト名を 1 本以上・重複なし
  *    (capture-ledger の CHECK と同じ式)。サイト用のスクリプトも、選ばれればどの頁でも走るので、`scripts/` が
  *    IIFE 1 つで、その最初の文が `if (!onSite()) return;` であることを構文木で見る。`generated/` は
  *    作り直して比べ、古い物と作る物の無い物を止める。`sites` の無いスクリプトが `onSite()` を読むのも止める。
- * 3. **クロールごとの値の宣言 (`params`) の形と、source との一致** —— name の綴り・kind・required・
+ * 3. **束ねるスクリプト (`tools/bundle.mjs` の `BUNDLES`) の形** —— `file` は `generated/<name>` を指し、`generated/` は
+ *    作り直して比べる。束ねた JS に `import`・`export` が無いこと (ts-compile-service が束ね直そうとしない形)、
+ *    束ねるソース (`scripts/<name>`) が import するのは `BUNDLES` の `packages` に名指した package だけであること。
+ * 4. **クロールごとの値の宣言 (`params`) の形と、source との一致** —— name の綴り・kind・required・
  *    summary・schema・archive・重複・知らない鍵 (既定値はソースの中にしか置かない)。変数の正は source の
  *    `defineParams(z.object({ … }))` で、`catalog.json` の `params` (kind: variable) はその写し
  *    (`tools/read-params.ts` が走らせずに読み、1 つでも違えば止める)。シークレットは `params` が正で、
  *    宣言した名前を source が `__bh.secrets.<名前>` で読んでいること、逆に読んでいる名前は宣言に在ること
  *    (コメントは除いて見る。`["名前"]` の形は見ない)。書き忘れと綴り違いを、登録する前に止める。
- * 4. **`import` の形** —— 受けるのは `import { z } from "zod"` と `import * as z from "zod/mini"` の 2 つで、
+ * 5. **`import` の形** —— 受けるのは `import { z } from "zod"` と `import * as z from "zod/mini"` の 2 つで、
  *    先頭の文に 1 つだけ。`phase: preload` のスクリプトには `import` も `defineParams` も書けない。tsc は
  *    どの形でも通すので、ここで見ないと tag の後にクロールの段で初めて落ちる (ts-compile-service の
- *    `BH0003`・`BH0004` と同じ決まり)。
- * 5. **sha256 を印字する** —— capture-ledger (`pnpm run scripts list`) に並ぶ digest と、
+ *    `BH0003`・`BH0004` と同じ決まり)。束ねるスクリプトの import は 3. で見る。
+ * 6. **sha256 を印字する** —— capture-ledger (`pnpm run scripts list`) に並ぶ digest と、
  *    目で突き合わせられるように。capture-ledger が打つのは、`file` が指す TS のバイト列に対する値。
  *
  * ## 何を見ないか
@@ -44,6 +47,7 @@ import { fileURLToPath } from "node:url";
 
 import ts from "typescript";
 
+import { BUNDLES, bundle } from "./bundle.mjs";
 import { readParams } from "./read-params.ts";
 import { hasSiteGuard, readsSites, writeSites } from "./write-sites.ts";
 
@@ -107,8 +111,39 @@ const importProblems = (code, phase) => {
   return found;
 };
 
+/**
+ * 束ねるソースの import の問題。静的な import 文で、`packages` に名指した package から読む物だけを通す
+ * (相対の path も通さない —— 束ねるソースは 1 本)。`import()`・`import x = require()`・`export` は通さない
+ */
+const bundleImportProblems = (code, packages) => {
+  const source = ts.createSourceFile("script.ts", code, ts.ScriptTarget.Latest, true);
+  const found = [];
+  const visit = (node) => {
+    const text = () => node.getText(source).replace(/\s+/g, " ").slice(0, 120);
+    if (ts.isImportDeclaration(node)) {
+      const from = node.moduleSpecifier.text;
+      if (!packages.includes(from)) {
+        found.push(`束ねてよい package でない import (${text()})。読めるのは tools/bundle.mjs の BUNDLES の packages (${packages.join(", ")})`);
+      }
+    } else if (ts.isImportEqualsDeclaration(node) || (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword)) {
+      found.push(`静的な import 文でない読み込み (${text()})`);
+    } else if (ts.isExportDeclaration(node) || ts.isExportAssignment(node)) {
+      found.push(`export は書けない (${text()})`);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return found;
+};
+
 const problems = [];
 const fail = (message) => problems.push(message);
+
+for (const [name, spec] of Object.entries(BUNDLES)) {
+  for (const [identifier, pkg] of Object.entries(spec.versions)) {
+    if (!spec.packages.includes(pkg)) fail(`tools/bundle.mjs の ${name}: 版を読む ${pkg} (${identifier}) が packages に無い`);
+  }
+}
 
 /**
  * @typedef {{ name: string, kind: "variable" | "secret", required?: boolean, summary: string, schema?: object, archive?: "keep" }} Param
@@ -277,7 +312,26 @@ for (const script of catalog.scripts) {
   // 見分けの行は書く所 (scripts/) で見る。generated/ は作り直して比べる
   const wanted = Array.isArray(sites) ? sites : [];
   const name = basename(String(script.file));
-  if (wanted.length > 0) {
+  const bundled = Object.hasOwn(BUNDLES, name);
+  if (bundled && wanted.length > 0) {
+    fail(`${where}: 束ねるスクリプト (tools/bundle.mjs の BUNDLES) に sites は書けない (書き込みと束ねるのを組み合わせる形をまだ作っていない)`);
+  } else if (bundled) {
+    // 型と import は束ねる前のソースで見る。generated/ は束ねた JS で、作り直して比べる
+    const written = readFileSync(join(root, "scripts", name), "utf8");
+    if (readsSites(written)) fail(`${where}: sites の無いスクリプトが onSite() か catalogSites() を読む`);
+    for (const problem of bundleImportProblems(written, BUNDLES[name].packages)) fail(`${where}: scripts/${name} の ${problem}`);
+    if (script.file !== `generated/${name}`) fail(`${where}: 束ねるスクリプトの file は generated/${name} を指す`);
+    else {
+      if (ts.isExternalModule(ts.createSourceFile(name, source, ts.ScriptTarget.Latest))) {
+        fail(`generated/${name} に import か export が在る —— 束ねた JS は 1 本で閉じる`);
+      }
+      try {
+        if (source !== (await bundle(name))) fail(`generated/${name} が古い —— pnpm run build を流す`);
+      } catch (error) {
+        fail(`generated/${name} を作り直せない: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+  } else if (wanted.length > 0) {
     const written = readFileSync(join(root, "scripts", name), "utf8");
     if (!hasSiteGuard(written)) {
       fail(`${where}: scripts/${name} は IIFE 1 つにし、最初の文を if (!onSite()) return; にする`);
@@ -317,8 +371,16 @@ for (const name of readdirSync(join(root, "examples")).filter((file) => file.end
   }
 }
 
-// 作る物の無い生成物
-const made = new Set(catalog.scripts.filter((script) => script.sites !== undefined).map((script) => basename(String(script.file))));
+// 作る物の無い生成物。作るのはサイト用のスクリプトと束ねるスクリプト
+const made = new Set(
+  catalog.scripts
+    .map((script) => ({ script, name: basename(String(script.file)) }))
+    .filter(({ script, name }) => script.sites !== undefined || Object.hasOwn(BUNDLES, name))
+    .map(({ name }) => name),
+);
+for (const name of Object.keys(BUNDLES)) {
+  if (!listed.has(name)) fail(`tools/bundle.mjs の BUNDLES の ${name} が catalog.json に無い`);
+}
 for (const name of existsSync(join(root, "generated")) ? readdirSync(join(root, "generated")) : []) {
   if (!made.has(name)) fail(`generated/${name} を作るスクリプトが無い`);
 }
