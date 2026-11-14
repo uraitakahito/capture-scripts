@@ -28,8 +28,8 @@
   // ことで、そこの遅延リソースは archive に無い。
   let reachedBottom = false;
   while (steps++ < maxSteps) {
-    // **受け皿の予算を見る。** 見ないスクリプトは止まらない (強制停止はサーバ側)。
-    // 1 段ぶんの猶予が無ければ、そこで畳む。
+    // **受け皿の予算を見る。** 予算は協調的で、見ないスクリプトは止まらない (サーバ側にも強制停止は無い ——
+    // スクリプトの段の外枠を超えれば、取り込みごと timeout になる)。1 段ぶんの猶予が無ければ、そこで畳む。
     if (globalThis.__bh.remainingMs < stepDelayMs + settleMs) {
       steps--;
       break;
