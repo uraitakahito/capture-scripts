@@ -3,8 +3,10 @@
 BrowserHive が取り込むページの中で走らせるスクリプト。TypeScript で書く。
 
 **サーバは顔ぶれを持たない。** [BrowserHive](https://github.com/uraitakahito/browserhive) v11.0.0 から、
-組み込みの behavior もサイト別の behavior も無くなった。送らなければページの中では何も走らず、
-受け皿すら注入されない —— **それでも取り込みは成功し、アーカイブも出る**。
+組み込みの behavior もサイト別の behavior も無くなった。送らなければスクリプトは 1 本も走らず、
+受け皿すら注入されない —— **それでも取り込みは成功し、アーカイブも出る**。BrowserHive 自身の計測や
+成果物のための読み取りは、スクリプトを送らない取り込みでもページに入る
+（BrowserHive の `docs-site/src/content/docs/behaviors.md`）。
 
 走らせるものを決めるのは頼む側で、その「走らせてよいものの一覧」がここに在る。
 配るのは [capture-ledger](https://github.com/uraitakahito/capture-ledger)
@@ -50,8 +52,10 @@ JS への変換は Windmill の flow の中で ts-compile-service がクロー�
 ## 受け皿 —— ページの中で使えるもの
 
 BrowserHive はスクリプトを走らせる前に、**受け皿 `__bh`** を 1 つだけ注入する。
-ページに現れる同梱のコードはこれだけで、アーカイブの `behaviors/runtime.js` に
-そのまま残る。受け皿のコードは値を含まない定数で（BrowserHive の版が同じなら同じバイト列）、
+スクリプトのために入れるコードはこれだけで、アーカイブの `behaviors/runtime.js` に
+そのまま残る（BrowserHive が自分の計測のために入れるコードは別。要求が `recordRandom: true` を頼んだ取り込みには、
+ページの JS が受け取る乱数を控えるスクリプトも入り、`random/recorder.js` に残る。この repo のスクリプトからは使えない）。
+受け皿のコードは値を含まない定数で（BrowserHive の版が同じなら同じバイト列）、
 予算・版の設定・クロールごとの値は、注入の直後に引数で渡される。
 
 ```js
