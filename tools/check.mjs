@@ -29,8 +29,8 @@
  * **型と構文は tsc が見る** (`pnpm run typecheck`)。型が通らない TS は tag にならない ——
  * それが門番の 1 か所目で、2 か所目はクロールの段ごとに同じ型検査をする ts-compile-service。
  *
- * **「本当にスクロールするか」は、ここでは言えない。** jsdom はレイアウトを持たず
- * `scrollHeight` が常に 0 なので、`autoscroll` は 1 段も進まない。振る舞いの証拠には
+ * **「本当にスクロールするか」は、ここでは言えない。** jsdom はレイアウトを持たないので、
+ * `autoscroll` は 1 段も進まない。振る舞いの証拠には
  * 本物のブラウザが要るので、capture-scheduler の e2e (capture-fixtures の
  * `/responsive-images` に対して `autofetch` が引いた変種を数える) に置いてある。
  *

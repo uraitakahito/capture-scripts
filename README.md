@@ -211,7 +211,7 @@ import { z } from "zod";
 
 `catalog.json` の項目に `"default": false` を書くと、そのスクリプトは capture-ledger の既定に入らない。
 capture-ledger は取り込みのときにこれを `enabled` に写し、`scripts` を省いたクロール（新しいクロールの画面の
-初めのチェックと、毎朝の定期のクロール）では走らせない。名指しすれば走る。省けば既定に入る。
+初めのチェックと、`scripts` を省いて作った予定の回）では走らせない。名指しすれば走る。省けば既定に入る。
 
 ```json
 {
@@ -374,8 +374,8 @@ pnpm run scripts list
 
 ## この検査が言えないこと
 
-**「本当にスクロールするか」はここでは言えない。** jsdom はレイアウトを持たないので
-`scrollHeight` が常に 0 —— `autoscroll` は 1 段も進まない。振る舞いの証拠には本物の
+**「本当にスクロールするか」はここでは言えない。** jsdom はレイアウトを持たないので、
+`autoscroll` は 1 段も進まない。振る舞いの証拠には本物の
 ブラウザが要るので、capture-scheduler の e2e に置いてある
 （capture-fixtures の `/responsive-images` に対して、ブラウザが自分では要求しない
 画像の変種が届いたかを数える）。
