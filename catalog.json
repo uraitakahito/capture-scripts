@@ -11,14 +11,19 @@
       "id": "egov-law-search",
       "phase": "behavior",
       "file": "generated/egov-law-search.ts",
-      "sites": ["laws.e-gov.go.jp"],
+      "sites": [
+        "laws.e-gov.go.jp"
+      ],
       "params": [
         {
           "name": "query",
           "kind": "variable",
           "required": true,
           "summary": "法令名の検索語",
-          "schema": { "type": "string", "minLength": 1 }
+          "schema": {
+            "type": "string",
+            "minLength": 1
+          }
         }
       ],
       "summary": "e-Gov 法令検索で法令名を引き（語は変数 query）、件数と法令名を報告する"
@@ -29,6 +34,13 @@
       "file": "scripts/autofetch.ts",
       "default": false,
       "summary": "走る時点の srcset の候補・data-* を fetch() で取りに行く（CSP が拒む URL は取れない。既定では走らない）"
+    },
+    {
+      "id": "face-mustache",
+      "phase": "behavior",
+      "file": "generated/face-mustache.ts",
+      "default": false,
+      "summary": "写真の顔を MediaPipe で見つけ、ヒゲの絵を重ねる（外のライブラリを束ねる見本。頁ごとに WASM 約 11 MB を外から読むので既定では走らない）"
     }
   ]
 }

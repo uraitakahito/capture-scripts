@@ -2,6 +2,9 @@
   "compilerOptions": {
     "target": "es2023",
     "module": "esnext",
+    // 束ねるスクリプトの import (tools/bundle.mjs の BUNDLES) を esbuild と同じく package の exports で引く。
+    // @mediapipe/tasks-vision 0.10.35 の exports は "types" を最後に置くが、TS 6 はそれでも vision.d.ts を引く
+    "moduleResolution": "bundler",
     "lib": ["es2023", "dom"],
     "types": [],
     "strict": true,
